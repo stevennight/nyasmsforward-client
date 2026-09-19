@@ -1,0 +1,14 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+
+# NSIS needs a BOM to read the Chinese strings; keep it.
+[*.nsi]
+charset = utf-8-bom
+
+# Windows PowerShell 5.1 reads BOM-less files as ANSI; keep scripts with non-ASCII text safe.
+[*.ps1]
+end_of_line = crlf

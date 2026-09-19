@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: "3.47.2"
+
+jobs:
+  verify:
+    name: Verify release source
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Check tag, VERSION and pubspec.yaml agree
+        run: dart run tool/check_version.dart "${GITHUB_REF_NAME}"
+
+      - name: Analyze
+        run: flutter analyze --no-pub
+
+      - name: Test
+        run: flutter test --no-pub
+
+  windows:
+    name: Windows installer and zip
+    needs: verify
+    # See ci.yml: pinned to a Visual Studio toolchain that the Flutter Windows plugins build with.
+    runs-on: windows-2022
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install NSIS
+        run: choco install nsis --no-progress --yes
+
+      - name: Build installer and portable zip
+        shell: pwsh
+        run: ./scripts/build-release.ps1 -SkipAndroid -Tag "${env:GITHUB_REF_NAME}"
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows
+          path: build/releases/*
+          if-no-files-found: error
+
+  android:
+    name: Signed Android APK
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Restore Android signing key
+        run: |
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "Missing ${name} secret" >&2
+              exit 1
+            fi
+          done
+          keystore_path="$RUNNER_TEMP/nyasmsforward-client-release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          echo "ANDROID_KEYSTORE_FILE=$keystore_path" >> "$GITHUB_ENV"
+
+      - name: Build signed APK
+        shell: pwsh
+        run: ./scripts/build-release.ps1 -SkipWindows -RequireSigned -Tag "${env:GITHUB_REF_NAME}"
+
+      - name: Verify APK signature
+        run: |
+          apk="$(ls build/releases/*.apk)"
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
+          "$apksigner" verify --print-certs "$apk"
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android
+          path: build/releases/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -l dist
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: dist/*
