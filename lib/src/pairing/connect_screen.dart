@@ -142,6 +142,10 @@ class _ConnectScreenState extends State<ConnectScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      Center(child: Image.asset('assets/nya_logo.png', width: 72, height: 72, key: const Key('appLogo'))),
+                      const SizedBox(height: 8),
+                      Center(child: Text('NyaSmsForward', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+                      const SizedBox(height: 12),
                       Text('连接到服务器', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                       if (widget.notice != null) ...[
                         const SizedBox(height: 8),

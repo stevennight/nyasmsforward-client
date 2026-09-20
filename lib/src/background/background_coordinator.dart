@@ -23,6 +23,8 @@ class BackgroundCoordinator with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     controller.addListener(_onController);
     FlutterForegroundTask.addTaskDataCallback(_onServiceData);
+    // Cover a controller that was already started before the coordinator was attached.
+    unawaited(_sync(reload: true));
   }
 
   void dispose() {
@@ -87,6 +89,11 @@ class BackgroundCoordinator with WidgetsBindingObserver {
       if (_serviceRunning) {
         AndroidBackground.setForeground(false);
         controller.setForeground(false);
+      } else {
+        // A service start can be rejected by Android (missing permission, a vendor battery policy, or a race while
+        // the app is leaving the foreground). Keep the app's stream alive in that case, and retry the service start;
+        // stopping the only live stream here would make background notifications disappear completely.
+        unawaited(_sync(reload: true));
       }
     }
   }

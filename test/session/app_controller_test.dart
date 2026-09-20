@@ -193,7 +193,8 @@ void main() {
       await until(() => server.called('GET', '/api/v1/conversations').length > listings, why: 'the list is refetched');
 
       listings = server.called('GET', '/api/v1/conversations').length;
-      server.emit('message', {...msgJson(4, direction: 'out', origin: 'platform'), 'notify': false}, id: 4);
+      // The client keeps its own safety check: even a malformed/stale event cannot notify for a sent message.
+      server.emit('message', {...msgJson(4, direction: 'out', origin: 'platform'), 'notify': true}, id: 4);
       await until(() => server.called('GET', '/api/v1/conversations').length > listings);
       expect(alerts, hasLength(1), reason: 'replies we sent and history never alert');
     });

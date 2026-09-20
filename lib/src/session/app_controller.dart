@@ -320,7 +320,8 @@ class AppController extends ChangeNotifier {
       case MessageEvent(:final message, :final notify):
         // The simple, correct thing: the server owns unread counts and ordering, so refetch instead of patching.
         // Alert first: the notification must not wait for two round trips.
-        if (notify) onIncoming?.call(message);
+        // Keep this guard on the client as well as on the server: sent messages must never notify locally.
+        if (notify && message.isIncoming) onIncoming?.call(message);
         unawaited(refreshAll());
       case ReadEvent() || DeletedEvent() || ResyncEvent() || OutboundEvent():
         unawaited(refreshAll());

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' show DartPluginRegistrant;
 
 import 'package:flutter/foundation.dart';
@@ -38,6 +39,12 @@ class NotificationHandlers {
 const _appUserModelId = 'app.nya.smsforward.client';
 const _windowsGuid = 'b4a5b3ad-9f44-4d3a-8d77-4f0f1c6f6a11';
 
+String? _windowsIconPath() {
+  if (!Platform.isWindows) return null;
+  final executable = File(Platform.resolvedExecutable);
+  return '${executable.parent.path}${Platform.pathSeparator}data${Platform.pathSeparator}flutter_assets${Platform.pathSeparator}assets${Platform.pathSeparator}nya_logo.ico';
+}
+
 /// Notifications through `flutter_local_notifications`: Windows toasts and Android notifications, both with a
 /// "copy code" button and an inline reply.
 class LocalNotificationService implements NotificationService {
@@ -53,9 +60,14 @@ class LocalNotificationService implements NotificationService {
   Future<void> init() async {
     if (_ready) return;
     await _plugin.initialize(
-      settings: const InitializationSettings(
+      settings: InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        windows: WindowsInitializationSettings(appName: 'NyaSmsForward', appUserModelId: _appUserModelId, guid: _windowsGuid),
+        windows: WindowsInitializationSettings(
+          appName: 'NyaSmsForward',
+          appUserModelId: _appUserModelId,
+          guid: _windowsGuid,
+          iconPath: _windowsIconPath(),
+        ),
       ),
       onDidReceiveNotificationResponse: (r) => unawaited(dispatchResponse(r, handlers, this)),
       onDidReceiveBackgroundNotificationResponse: notificationBackgroundHandler,

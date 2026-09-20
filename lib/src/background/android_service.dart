@@ -67,7 +67,8 @@ class MessageWatcher extends TaskHandler {
   void _onEvent(ServerEvent e) {
     switch (e) {
       case MessageEvent(:final message, :final notify):
-        if (notify && _settings.notifications && !_uiForeground) {
+        // Messages sent on the SIM phone are history for this client and should not make a notification.
+        if (notify && message.isIncoming && _settings.notifications && !_uiForeground) {
           unawaited(_notifier!.showMessage(message, canReply: _settings.scopes.contains('reply')));
         }
       case ReadEvent(:final ids) || DeletedEvent(:final ids):
