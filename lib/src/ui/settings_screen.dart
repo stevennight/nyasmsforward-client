@@ -1,0 +1,199 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import '../session/app_controller.dart';
+import '../session/settings_store.dart';
+
+/// Connection settings: the address (with verification), a connection test, notifications, quick replies and signing out.
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key, required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  late final _url = TextEditingController(text: widget.controller.settings.serverUrl ?? '');
+  late final _quick = TextEditingController(text: widget.controller.settings.quickReplies.join('，'));
+  String? _urlError;
+  ({bool ok, String text})? _note;
+  bool _busy = false;
+
+  AppController get c => widget.controller;
+
+  @override
+  void dispose() {
+    _url.dispose();
+    _quick.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveUrl() async {
+    setState(() {
+      _busy = true;
+      _urlError = null;
+      _note = null;
+    });
+    final error = await c.changeServerUrl(_url.text);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _urlError = error;
+      if (error == null) _note = (ok: true, text: '已保存，令牌继续有效。');
+    });
+  }
+
+  Future<void> _test() async {
+    setState(() {
+      _busy = true;
+      _note = null;
+    });
+    final text = await c.testConnection();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _note = (ok: text.startsWith('连接正常'), text: text);
+    });
+  }
+
+  void _saveQuick() {
+    final list = _quick.text.split(RegExp(r'[,，\n]')).map((s) => s.trim()).where((s) => s.isNotEmpty).take(8).toList();
+    c.updateSettings(c.settings.copyWith(quickReplies: list.isEmpty ? ClientSettings.defaultQuickReplies : list));
+  }
+
+  Future<void> _signOut() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('断开连接？'),
+        content: const Text('将清除本机的登录令牌，之后需要重新连接才能查看短信。服务器上的短信不受影响。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          TextButton(key: const Key('confirmSignOut'), onPressed: () => Navigator.pop(context, true), child: const Text('断开')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await c.signOut();
+    if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final s = c.settings;
+    final scopes = [if (c.scopes.canRead) '查看', if (c.scopes.canReply) '回复', if (c.scopes.canSend) '新发'];
+    return Scaffold(
+      appBar: AppBar(title: const Text('设置')),
+      body: ListenableBuilder(
+        listenable: c,
+        builder: (context, _) => ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _Section('服务器地址', [
+              TextField(
+                key: const Key('settingsUrl'),
+                controller: _url,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                decoration: InputDecoration(errorText: _urlError),
+                onChanged: (_) => setState(() {
+                  _urlError = null;
+                  _note = null;
+                }),
+              ),
+              Text(
+                '换域名或端口不需要重新连接：令牌和地址无关。新地址只有在那台服务器认得这个客户端时才会保存，输错了也不会被锁在外面。',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  FilledButton(
+                    key: const Key('saveUrl'),
+                    style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+                    onPressed: _busy || _url.text.trim() == s.serverUrl ? null : _saveUrl,
+                    child: const Text('保存并验证'),
+                  ),
+                  OutlinedButton(key: const Key('testConnection'), onPressed: _busy ? null : _test, child: const Text('测试连接')),
+                ],
+              ),
+              if (_note != null)
+                Text(_note!.text, key: const Key('settingsNote'), style: TextStyle(color: _note!.ok ? theme.colorScheme.primary : theme.colorScheme.error)),
+            ]),
+            _Section('这个客户端', [
+              Text(s.deviceName ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text('权限：${scopes.isEmpty ? '无' : scopes.join('、')}（由管理员在 Web 设备页设置）'),
+              Text('登录令牌：长期有效，不会自动过期，加密保存在本机。', style: theme.textTheme.bodySmall),
+              if (c.me?.serverVersion != null) Text('服务器版本 ${c.me!.serverVersion}', style: theme.textTheme.bodySmall),
+            ]),
+            _Section('通知', [
+              SwitchListTile(
+                key: const Key('notifySwitch'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('新短信通知'),
+                subtitle: const Text('验证码短信的通知里可以直接复制验证码，也可以直接回复'),
+                value: s.notifications,
+                onChanged: (v) => c.updateSettings(s.copyWith(notifications: v)),
+              ),
+              if (defaultTargetPlatform == TargetPlatform.windows)
+                SwitchListTile(
+                  key: const Key('trayswitch'),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('关闭窗口时留在托盘'),
+                  subtitle: const Text('关闭主窗口后继续接收短信并弹出通知；在托盘图标上选择“退出”才会完全关闭'),
+                  value: s.minimizeToTray,
+                  onChanged: (v) => c.updateSettings(s.copyWith(minimizeToTray: v)),
+                ),
+            ]),
+            _Section('快捷回复', [
+              TextField(
+                key: const Key('quickField'),
+                controller: _quick,
+                decoration: const InputDecoration(helperText: '用逗号分隔，最多 8 个。点一下填进回复框，仍需要你确认发送'),
+                onSubmitted: (_) => _saveQuick(),
+                onEditingComplete: _saveQuick,
+              ),
+            ]),
+            _Section('断开连接', [
+              Text('清除本机的令牌。服务器地址和设备名称会保留，重新连接更快。', style: theme.textTheme.bodySmall),
+              OutlinedButton(
+                key: const Key('signOut'),
+                onPressed: _signOut,
+                child: Text('断开并清除令牌', style: TextStyle(color: theme.colorScheme.error)),
+              ),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Section extends StatelessWidget {
+  const _Section(this.title, this.children);
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            for (final w in children) Padding(padding: const EdgeInsets.only(bottom: 8), child: w),
+          ],
+        ),
+      ),
+    );
+  }
+}

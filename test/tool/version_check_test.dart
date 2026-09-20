@@ -42,4 +42,11 @@ void main() {
       contains(contains('ambiguous')),
     );
   });
+
+  test('the version compiled into main.dart must follow VERSION', () {
+    const main = "const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0');";
+    expect(checkVersions(versionFile: '0.1.0', pubspec: pubspec, mainDart: main), isEmpty);
+    expect(checkVersions(versionFile: '0.1.0', pubspec: pubspec, mainDart: main.replaceAll('0.1.0', '0.0.9')).single, contains('does not match'));
+    expect(checkVersions(versionFile: '0.1.0', pubspec: pubspec, mainDart: 'void main() {}').single, contains('no APP_VERSION'));
+  });
 }

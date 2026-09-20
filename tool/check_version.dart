@@ -9,6 +9,7 @@ void main(List<String> args) {
     versionFile: File('VERSION').readAsStringSync(),
     pubspec: File('pubspec.yaml').readAsStringSync(),
     tag: args.isEmpty ? null : args.first,
+    mainDart: File('lib/main.dart').readAsStringSync(),
   );
   if (problems.isEmpty) {
     stdout.writeln('version OK: ${File('VERSION').readAsStringSync().trim()}');

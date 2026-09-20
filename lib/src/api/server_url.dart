@@ -40,6 +40,14 @@ final class ServerUrlInvalid extends ServerUrlResult {
   String toString() => 'ServerUrlInvalid($problem)';
 }
 
+/// Words for an address problem, shown under the address field and in the settings page.
+String serverUrlProblemText(ServerUrlProblem p) => switch (p) {
+      ServerUrlProblem.empty => '请填写服务器地址',
+      ServerUrlProblem.badScheme => '地址需要以 https:// 开头',
+      ServerUrlProblem.badHost => '服务器地址格式不正确',
+      ServerUrlProblem.publicHttp => '公网地址必须使用 HTTPS（只有 localhost / 局域网地址可以用 http）',
+    };
+
 abstract final class ServerUrl {
   static final _hostPattern = RegExp(r'^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$');
   static final _ipv4 = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$');

@@ -3,6 +3,7 @@
 /// - `VERSION` is `MAJOR.MINOR.PATCH` and is the single source of truth.
 /// - `pubspec.yaml` must say `version: MAJOR.MINOR.PATCH+BUILD` with the same triple, and
 ///   `BUILD = major*1000000 + minor*1000 + patch` (the same formula client-node uses for its versionCode).
+/// - The `APP_VERSION` default in `lib/main.dart` (what the app tells the server) equals `VERSION`.
 /// - When a tag is given (release builds), it must be `v<VERSION>`.
 library;
 
@@ -16,7 +17,7 @@ int buildNumberFor(String version) {
 }
 
 /// Returns a list of problems; empty means everything is consistent.
-List<String> checkVersions({required String versionFile, required String pubspec, String? tag}) {
+List<String> checkVersions({required String versionFile, required String pubspec, String? tag, String? mainDart}) {
   final problems = <String>[];
   final version = versionFile.trim();
 
@@ -42,6 +43,16 @@ List<String> checkVersions({required String versionFile, required String pubspec
     final expected = buildNumberFor(version);
     if (parts.length != 2 || parts[1] != '$expected') {
       problems.add('pubspec.yaml build number must be +$expected for $version, got "${parts.length > 1 ? parts[1] : ''}"');
+    }
+  }
+
+  // The app reports its version when it connects, so the default compiled into lib/main.dart must not drift.
+  if (mainDart != null) {
+    final m = RegExp(r"APP_VERSION',\s*defaultValue:\s*'([^']*)'").firstMatch(mainDart);
+    if (m == null) {
+      problems.add('lib/main.dart has no APP_VERSION default');
+    } else if (m.group(1) != version) {
+      problems.add('lib/main.dart APP_VERSION default ${m.group(1)} does not match VERSION $version');
     }
   }
 

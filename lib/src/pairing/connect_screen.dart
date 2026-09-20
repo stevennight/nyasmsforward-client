@@ -3,27 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api/server_url.dart';
+import 'connect_request.dart';
+import 'pair_link.dart';
 
-enum ConnectMode { pairingCode, accountLogin }
-
-/// What the user typed, already validated.
-class ConnectRequest {
-  const ConnectRequest({
-    required this.serverUrl,
-    required this.mode,
-    required this.deviceName,
-    this.pairingCode,
-    this.password,
-    this.totp,
-  });
-
-  final String serverUrl;
-  final ConnectMode mode;
-  final String deviceName;
-  final String? pairingCode;
-  final String? password;
-  final String? totp;
-}
+export 'connect_request.dart';
 
 /// Performs the actual pairing / login and returns a message to show, or null on success.
 typedef ConnectHandler = Future<String?> Function(ConnectRequest request);
@@ -31,30 +14,33 @@ typedef ConnectHandler = Future<String?> Function(ConnectRequest request);
 /// M0 placeholder for the real pairing flow (M2).
 Future<String?> notImplementedYet(ConnectRequest request) async => '输入有效。配对与登录将在 M2 实现。';
 
-String serverUrlProblemText(ServerUrlProblem p) => switch (p) {
-      ServerUrlProblem.empty => '请填写服务器地址',
-      ServerUrlProblem.badScheme => '地址需要以 https:// 开头',
-      ServerUrlProblem.badHost => '服务器地址格式不正确',
-      ServerUrlProblem.publicHttp => '公网地址必须使用 HTTPS（只有 localhost / 局域网地址可以用 http）',
-    };
-
 /// Shown when the client is not connected: server address plus either a one-time pairing code or the admin
 /// account. Connecting is a one-time step; the resulting token is long-lived (docs/开发计划.md §3.1).
 class ConnectScreen extends StatefulWidget {
-  const ConnectScreen({super.key, this.onConnect = notImplementedYet});
+  const ConnectScreen({super.key, this.onConnect = notImplementedYet, this.initialUrl, this.initialName, this.notice, this.onScan});
 
   final ConnectHandler onConnect;
+
+  /// Remembered from an earlier connection: signing out keeps the address and the device name.
+  final String? initialUrl;
+  final String? initialName;
+
+  /// Something the user should know first, e.g. "the token was revoked, connect again".
+  final String? notice;
+
+  /// Scans a pairing QR code (Android). Null hides the button.
+  final Future<String?> Function()? onScan;
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
 }
 
 class _ConnectScreenState extends State<ConnectScreen> {
-  final _url = TextEditingController();
+  late final _url = TextEditingController(text: widget.initialUrl ?? '');
   final _code = TextEditingController();
   final _password = TextEditingController();
   final _totp = TextEditingController();
-  late final _name = TextEditingController(text: _defaultDeviceName());
+  late final _name = TextEditingController(text: widget.initialName ?? _defaultDeviceName());
 
   ConnectMode _mode = ConnectMode.pairingCode;
   String? _urlError, _codeError, _passwordError, _totpError, _message;
@@ -79,6 +65,19 @@ class _ConnectScreenState extends State<ConnectScreen> {
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// Accepts a pairing link (the QR content, docs/协议.md §3.2) pasted or scanned: fills the address and the code.
+  bool _applyLink(String text) {
+    final link = PairLink.tryParse(text);
+    if (link == null) return false;
+    setState(() {
+      _url.text = link.server;
+      _code.text = link.code;
+      _mode = ConnectMode.pairingCode;
+      _urlError = _codeError = null;
+    });
+    return true;
   }
 
   Future<void> _submit() async {
@@ -144,6 +143,10 @@ class _ConnectScreenState extends State<ConnectScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text('连接到服务器', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      if (widget.notice != null) ...[
+                        const SizedBox(height: 8),
+                        Text(widget.notice!, key: const Key('notice'), style: TextStyle(color: theme.colorScheme.error)),
+                      ],
                       const SizedBox(height: 16),
                       TextField(
                         key: const Key('serverUrl'),
@@ -155,7 +158,25 @@ class _ConnectScreenState extends State<ConnectScreen> {
                           hintText: 'https://sms.example.com',
                           errorText: _urlError,
                         ),
+                        onChanged: (v) {
+                          if (v.startsWith('nyasmsforward://')) _applyLink(v);
+                        },
                       ),
+                      if (widget.onScan != null) ...[
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          key: const Key('scan'),
+                          onPressed: _busy
+                              ? null
+                              : () async {
+                                  final text = await widget.onScan!();
+                                  if (text == null || !mounted) return;
+                                  if (!_applyLink(text)) setState(() => _message = '这不是 NyaSmsForward 的配对二维码');
+                                },
+                          icon: const Icon(Icons.qr_code_scanner),
+                          label: const Text('扫描配对二维码'),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       SegmentedButton<ConnectMode>(
                         segments: const [
@@ -212,7 +233,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                       ),
                       if (_message != null) ...[
                         const SizedBox(height: 12),
-                        Text(_message!, key: const Key('message'), style: TextStyle(color: theme.colorScheme.primary)),
+                        Text(_message!, key: const Key('message'), style: TextStyle(color: theme.colorScheme.error)),
                       ],
                       const SizedBox(height: 16),
                       FilledButton(
