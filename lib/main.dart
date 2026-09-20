@@ -17,7 +17,7 @@ import 'src/session/settings_store.dart';
 import 'src/ui/format.dart';
 
 /// Keep in sync with pubspec.yaml (`tool/check_version.dart` verifies the release).
-const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.2.5');
+const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.2.6');
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,7 +66,9 @@ Future<void> main(List<String> args) async {
       if (n == null || !controller.settings.notifications) return;
       if (isAndroid &&
           controller.appVisible &&
-          !controller.settings.foregroundNotifications) return;
+          !controller.settings.foregroundNotifications) {
+        return;
+      }
       if (isWindows && (await shell?.isInFront() ?? false)) return;
       await n.showMessage(m, canReply: controller.scopes.canReply);
     },
