@@ -15,7 +15,7 @@ class NyaApp extends StatelessWidget {
   final AppController? controller;
 
   /// Scans a pairing QR code (Android). Null hides the scan button.
-  final Future<String?> Function()? onScan;
+  final Future<String?> Function(BuildContext context)? onScan;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +36,7 @@ class _Root extends StatelessWidget {
   const _Root({required this.controller, this.onScan});
 
   final AppController controller;
-  final Future<String?> Function()? onScan;
+  final Future<String?> Function(BuildContext context)? onScan;
 
   @override
   Widget build(BuildContext context) {

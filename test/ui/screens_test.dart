@@ -2,6 +2,7 @@ import 'package:client/src/app/app.dart';
 import 'package:client/src/pairing/pair_link.dart';
 import 'package:client/src/pairing/token_store.dart';
 import 'package:client/src/session/app_controller.dart';
+import 'package:client/src/session/platform_hooks.dart';
 import 'package:client/src/session/settings_store.dart';
 import 'package:client/src/ui/home_screen.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/fake_server.dart';
 
 class Rig {
-  Rig({List<String> scopes = const ['read', 'reply', 'send'], Map<String, Object?> phone = const {}, bool replyable = true, List<Map<String, Object?>>? extraConversations, this.connected = true}) {
+  Rig({List<String> scopes = const ['read', 'reply', 'send'], Map<String, Object?> phone = const {}, bool replyable = true, List<Map<String, Object?>>? extraConversations, this.connected = true, PlatformHooks hooks = const PlatformHooks()}) {
     server = FakeServer(connectedRoutes(
       scopes: scopes,
       conversations: [convJson(msgJson(2, code: '583921', body: '【示例商城】验证码 583921'), unread: 1, replyable: replyable), ...?extraConversations],
@@ -20,7 +21,7 @@ class Rig {
     ));
     tokens = MemoryTokenStore();
     store = MemorySettingsStore(connected ? const ClientSettings(serverUrl: 'https://sms.example.com', deviceName: '台式机') : const ClientSettings());
-    controller = AppController(tokens: tokens, settingsStore: store, appVersion: '0.2.0', platform: 'windows', apiFactory: server.factory, streamEnabled: false);
+    controller = AppController(tokens: tokens, settingsStore: store, appVersion: '0.2.0', platform: 'windows', apiFactory: server.factory, streamEnabled: false, hooks: hooks);
   }
 
   final bool connected;
@@ -42,6 +43,22 @@ class Rig {
 }
 
 Finder byKey(String k) => find.byKey(Key(k));
+
+class FakeLaunch implements LaunchAtLogin {
+  bool enabled = false;
+  @override
+  Future<bool> isEnabled() async => enabled;
+  @override
+  Future<void> set(bool value) async => enabled = value;
+}
+
+class FakeBattery implements BatteryExemption {
+  int requested = 0;
+  @override
+  Future<bool> isExempt() async => requested > 0;
+  @override
+  Future<void> request() async => requested++;
+}
 
 void main() {
   group('the app root', () {
@@ -338,6 +355,42 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('暂时不可用'), findsOneWidget);
       expect(rig.store.value.serverUrl, 'https://sms.example.com');
+    });
+
+    testWidgets('platform features appear only where the platform offers them', (tester) async {
+      final rig = Rig();
+      await rig.pump(tester);
+      await openSettings(tester);
+      expect(find.text('后台运行'), findsNothing);
+      expect(byKey('launchAtLogin'), findsNothing);
+      expect(byKey('batteryRequest'), findsNothing);
+    });
+
+    testWidgets('start with Windows is a switch that writes through the hook', (tester) async {
+      final launch = FakeLaunch();
+      final rig = Rig(hooks: PlatformHooks(launchAtLogin: launch));
+      await rig.pump(tester);
+      await openSettings(tester);
+      await tester.ensureVisible(byKey('launchAtLogin'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<SwitchListTile>(byKey('launchAtLogin')).value, isFalse);
+      await tester.tap(byKey('launchAtLogin'));
+      await tester.pumpAndSettle();
+      expect(launch.enabled, isTrue);
+      expect(tester.widget<SwitchListTile>(byKey('launchAtLogin')).value, isTrue);
+    });
+
+    testWidgets('the battery exemption is requested from a button and then shown as done', (tester) async {
+      final battery = FakeBattery();
+      final rig = Rig(hooks: PlatformHooks(battery: battery));
+      await rig.pump(tester);
+      await openSettings(tester);
+      await tester.ensureVisible(byKey('batteryRequest'));
+      await tester.pumpAndSettle();
+      await tester.tap(byKey('batteryRequest'));
+      await tester.pumpAndSettle();
+      expect(battery.requested, 1);
+      expect(byKey('batteryOk'), findsOneWidget);
     });
 
     testWidgets('quick replies are editable and used by the reply box', (tester) async {

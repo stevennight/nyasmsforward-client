@@ -145,6 +145,8 @@ Section "Uninstall"
   RMDir /r "$SMPROGRAMS\${APP_NAME}"
   RMDir /r "$INSTDIR"
   DeleteRegKey HKLM "${UNINST_KEY}"
+  ; The app can register itself to start with Windows (settings page); do not leave that behind.
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "NyaSmsForward"
 SectionEnd
 
 ; The uninstaller needs its own copy of the helpers (NSIS keeps install and uninstall functions separate).

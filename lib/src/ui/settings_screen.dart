@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../session/app_controller.dart';
+import '../session/platform_hooks.dart';
 import '../session/settings_store.dart';
 
 /// Connection settings: the address (with verification), a connection test, notifications, quick replies and signing out.
@@ -148,6 +149,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (v) => c.updateSettings(s.copyWith(minimizeToTray: v)),
                 ),
             ]),
+            if (c.hooks.launchAtLogin != null || c.hooks.battery != null)
+              _Section('后台运行', [
+                if (c.hooks.launchAtLogin != null) _LaunchAtLoginSwitch(hook: c.hooks.launchAtLogin!),
+                if (c.hooks.battery != null) _BatteryTile(hook: c.hooks.battery!),
+              ]),
             _Section('快捷回复', [
               TextField(
                 key: const Key('quickField'),
@@ -194,6 +200,106 @@ class _Section extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Windows: start with Windows, hidden in the tray.
+class _LaunchAtLoginSwitch extends StatefulWidget {
+  const _LaunchAtLoginSwitch({required this.hook});
+
+  final LaunchAtLogin hook;
+
+  @override
+  State<_LaunchAtLoginSwitch> createState() => _LaunchAtLoginSwitchState();
+}
+
+class _LaunchAtLoginSwitchState extends State<_LaunchAtLoginSwitch> {
+  bool? _on;
+  String? _problem;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.hook.isEnabled().then((v) {
+      if (mounted) setState(() => _on = v);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            key: const Key('launchAtLogin'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('开机自启'),
+            subtitle: const Text('登录 Windows 后自动在托盘里运行，这样不用打开窗口也能收到新短信通知'),
+            value: _on ?? false,
+            onChanged: _on == null
+                ? null
+                : (v) async {
+                    try {
+                      await widget.hook.set(v);
+                      if (mounted) setState(() => _on = v);
+                    } on Object {
+                      if (mounted) setState(() => _problem = '设置失败，可能被安全软件拦截');
+                    }
+                  },
+          ),
+          if (_problem != null) Text(_problem!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ],
+      );
+}
+
+/// Android: exempt the app from battery optimisation so the background connection is not stopped.
+class _BatteryTile extends StatefulWidget {
+  const _BatteryTile({required this.hook});
+
+  final BatteryExemption hook;
+
+  @override
+  State<_BatteryTile> createState() => _BatteryTileState();
+}
+
+class _BatteryTileState extends State<_BatteryTile> {
+  bool? _exempt;
+
+  Future<void> _refresh() async {
+    final v = await widget.hook.isExempt();
+    if (mounted) setState(() => _exempt = v);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('后台连接'),
+        Text(
+          '应用在后台时由一个常驻通知保持与服务器的连接，新短信才能及时通知你。系统的省电策略可能会停掉它，建议允许“不受电池优化限制”；部分国产系统还需要允许自启动和后台运行。',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 8),
+        if (_exempt == true)
+          Text('已允许不受电池优化限制', key: const Key('batteryOk'), style: TextStyle(color: theme.colorScheme.primary))
+        else
+          OutlinedButton(
+            key: const Key('batteryRequest'),
+            onPressed: () async {
+              await widget.hook.request();
+              await _refresh();
+            },
+            child: const Text('允许不受电池优化限制'),
+          ),
+      ],
     );
   }
 }

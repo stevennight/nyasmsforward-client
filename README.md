@@ -17,14 +17,29 @@ NyaSmsForward 由三个独立仓库组成，互不依赖代码，只通过服务
 
 ## 当前状态
 
-**M0 脚手架已完成**：Windows 和 Android 都能构建、测试、打包发布；界面目前只有“连接到服务器”页（校验输入，实际配对从 M2 开始）。已经落地并有测试的逻辑：
+**M2（查看）和 M3（回复 + 新发）已完成**，用真实服务端的端到端测试验证过协议层（`test/e2e/`）。**平台相关的部分（Windows 托盘 / Toast、Android 前台服务 / 通知 / 扫码）已编译通过、逻辑有单元测试，但没有在真机 / 真实桌面会话里验证过**，见下面“未验证”。
 
-- `lib/src/api/server_url.dart`：服务器地址校验（必须 https，仅 localhost / 局域网可用 http）。
-- `lib/src/api/connection.dart`：“什么情况才算令牌失效”的严格判定和重连退避（协议 §2.2）。
-- `lib/src/api/protocol.dart`：下发策略、客户端权限（scopes）、错误码。
-- `lib/src/pairing/`：令牌存储（Android Keystore / Windows 凭据管理器）和连接页外壳。
+- **连接**：配对码（兼容 `483 920`）、管理员账号登录（只用一次换令牌，不保存密码）、粘贴 / 扫描配对链接 `nyasmsforward://pair?…`（Android 扫码）。令牌存系统安全存储，长期有效；只有 `401` + `token_revoked / token_invalid / token_expired` 才回到连接页（保留地址和设备名），断网 / 5xx / 反代裸 401 一律保留令牌、退避重连。
+- **实时**：`GET /api/v1/events`（SSE，`Authorization` 头，`http` 流式手写解析）。重连带 `Last-Event-ID` 补发，连上就重新拉取列表，70 秒没有任何数据（服务端每 20 秒一条 keep-alive）视为断线。
+- **浏览**：会话列表 / 搜索 / 未读过滤，宽窗口左右分栏、手机上逐页；验证码识别卡片一键复制；发出的短信区分“手机上发出 / 经平台发出”。
+- **回复与新发**：回复框（Enter 发送、Shift+Enter 换行、输入法组字时的 Enter 不发送）、快捷回复（点一下填入，仍需确认发送，可在设置里改）、发送任务状态条（排队 → 已下发 → 已发送 → 已送达 / 失败原因，排队中可取消）、新短信对话框（选手机、SIM、号码）；权限 / 策略不足时说明是哪一层不允许。
+- **通知**：Windows Toast、Android 通知，验证码在标题里，按钮「复制验证码」和内联回复；已读 / 删除后撤销。
+- **Windows**：托盘图标（未读数在提示里）、关闭窗口留在托盘、可选开机自启（`--background` 隐藏启动）。
+- **Android**：前台服务（`specialUse`）在后台保持连接并弹通知，App 在前台时由 App 自己持有连接（同一时间只有一条连接、不重复提醒）；电池优化白名单入口。
 
-以上与 client-node 共用同一批测试用例，保证两个 App 的判断一致。详见 [开发计划](docs/开发计划.md)。
+### 未验证（需要真机 / 真实桌面）
+
+- Windows：托盘图标与菜单、Toast 是否弹出以及按钮 / 输入框回调（未打包 App 的 AUMID 注册由插件写注册表，未实测）、开机自启后的隐藏启动。
+- Android：前台服务保活（尤其国产 ROM）、从最近任务划掉后是否继续、通知里的内联回复（后台 isolate 处理函数）、「复制验证码」按钮在各 ROM 上能否写剪贴板、二维码扫描。
+- 未做：Windows 单实例（重复启动会出现多个托盘图标）、本地缓存（离线时看不到历史）、发送前的系统认证（生物识别 / Windows Hello）。
+
+已经落地并有测试的逻辑：
+
+- `lib/src/api/`：`ApiClient`（REST）、`EventStreamRunner`（SSE）、模型、地址校验、令牌失效判定和退避（与 client-node 共用同一批判断用例）。
+- `lib/src/session/`：`AppController`（连接、列表、实时事件、回复 / 新发、改地址先验证）、设置存储。
+- `lib/src/notifications/`、`lib/src/background/`、`lib/src/desktop/`：通知内容与按钮分发（纯 Dart，有测试）、Android 后台服务、Windows 托盘和开机自启（含对真实注册表的测试）。
+
+详见 [开发计划](docs/开发计划.md)。
 
 ## 开发
 
@@ -35,6 +50,9 @@ flutter pub get
 flutter analyze
 flutter test
 flutter run -d windows        # 或 -d <android 设备>
+
+# 对着真实服务端跑端到端测试（服务端用全新的空数据目录启动）
+$env:NYASMS_E2E_URL = "http://127.0.0.1:18080"; flutter test test/e2e
 ```
 
 - 版本号只在 `VERSION`（`MAJOR.MINOR.PATCH`）。`pubspec.yaml` 必须写成 `version: <VERSION>+<构建号>`，构建号 = `major*1000000 + minor*1000 + patch`（例如 0.1.0 → `+1000`）。`dart run tool/check_version.dart` 会检查这一点，CI 和构建脚本都会调用它。

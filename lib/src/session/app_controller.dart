@@ -13,6 +13,7 @@ import '../api/protocol.dart';
 import '../api/server_url.dart';
 import '../pairing/connect_request.dart';
 import '../pairing/token_store.dart';
+import 'platform_hooks.dart';
 import 'settings_store.dart';
 
 enum AppPhase {
@@ -42,6 +43,7 @@ class AppController extends ChangeNotifier {
     this.onIncoming,
     this.pause,
     this.streamEnabled = true,
+    this.hooks = const PlatformHooks(),
   });
 
   final TokenStore tokens;
@@ -58,6 +60,9 @@ class AppController extends ChangeNotifier {
 
   /// Overridable backoff wait so tests do not sleep.
   final Future<void> Function(Duration)? pause;
+
+  /// What this platform can additionally do (start with Windows, battery exemption): shown in the settings page.
+  final PlatformHooks hooks;
 
   /// Whether to open the live event stream (widget tests turn it off: it keeps a timer alive).
   final bool streamEnabled;
@@ -391,6 +396,20 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  /// Replies to a specific message (a notification's inline reply), whichever conversation is open.
+  Future<String?> replyToMessage(int messageId, String text) async {
+    final api = _api;
+    if (api == null) return '还没有连接';
+    try {
+      await api.reply(messageId, text);
+      await _refreshTasks();
+      return null;
+    } on ApiException catch (e) {
+      if (e.isTokenDead) unawaited(_tokenDied());
+      return e.text;
+    }
+  }
+
   Future<String?> sendNew({required String deviceId, int? simSlot, required String to, required String body}) async {
     final api = _api;
     if (api == null) return '还没有连接';
@@ -489,6 +508,23 @@ class AppController extends ChangeNotifier {
 
   /// The network came back or the app returned to the foreground: reconnect the stream now.
   void nudge() => _stream?.nudge();
+
+  bool _foreground = true;
+
+  /// Android: while the app is in the background a foreground service holds the connection and shows the notifications,
+  /// so this stream closes (one connection at a time, and no double alerts); coming back reconnects and catches up.
+  void setForeground(bool foreground) {
+    if (_foreground == foreground) return;
+    _foreground = foreground;
+    if (phase != AppPhase.ready || _api == null || !scopes.canRead) return;
+    if (foreground) {
+      _startStream();
+      unawaited(refreshAll());
+    } else {
+      _stream?.stop();
+      _stream = null;
+    }
+  }
 
   void _setPhase(AppPhase p) {
     phase = p;

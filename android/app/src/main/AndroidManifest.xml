@@ -1,10 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!--
-      M0 only needs the network. Later milestones add what they use, each with a reason:
-      POST_NOTIFICATIONS / FOREGROUND_SERVICE / RECEIVE_BOOT_COMPLETED (M2), CAMERA for QR pairing (M2).
-      No SMS permission is ever needed here: SMS are handled by the receiver phone (client-node).
+      What each permission is for. No SMS permission is ever needed here: SMS are handled by the receiver phone.
+      INTERNET               talk to the server
+      POST_NOTIFICATIONS     notifications for new messages (Android 13+), asked when they are switched on
+      FOREGROUND_SERVICE     keep the connection alive in the background so notifications arrive with the app closed
+      RECEIVE_BOOT_COMPLETED restart that connection after a reboot
+      WAKE_LOCK              keep the connection serviced while the screen is off
+      CAMERA                 scan the pairing QR code (only when the scan button is used)
     -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:allowBackup="false"
@@ -33,6 +44,19 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!--
+          The background connection (flutter_foreground_task). specialUse: a long-lived connection to the user's own
+          server has no better fitting type, and unlike dataSync it has no 6 hour limit on Android 15.
+        -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps an event stream to the user's own server open so new SMS can be shown as notifications" />
+        </service>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

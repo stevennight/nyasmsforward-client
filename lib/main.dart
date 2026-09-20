@@ -1,22 +1,77 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'src/app/app.dart';
+import 'src/background/android_service.dart';
+import 'src/background/background_coordinator.dart';
+import 'src/desktop/desktop_shell.dart';
+import 'src/desktop/launch_at_login.dart';
+import 'src/session/platform_hooks.dart';
+import 'src/notifications/notification_service.dart';
+import 'src/pairing/qr_scanner.dart';
 import 'src/pairing/token_store.dart';
 import 'src/session/app_controller.dart';
 import 'src/session/settings_store.dart';
+import 'src/ui/format.dart';
 
 /// Keep in sync with pubspec.yaml (`tool/check_version.dart` verifies the release).
 const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0');
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  final controller = AppController(
+  final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+  final isWindows = defaultTargetPlatform == TargetPlatform.windows;
+  if (isAndroid) AndroidBackground.initCommunication(); // lets the background service talk to this isolate
+
+  late final AppController controller;
+  DesktopShell? shell;
+  LocalNotificationService? notifier;
+
+  if (isAndroid || isWindows) {
+    notifier = LocalNotificationService(
+      handlers: NotificationHandlers(
+        copyCode: (code) async {
+          await copyText(code);
+        },
+        open: (to) {
+          unawaited(shell?.showAndFocus());
+          final match = controller.conversations.where((c) => c.deviceId == to.deviceId && c.peerKey == to.peerKey);
+          if (match.isNotEmpty) unawaited(controller.openConversation(match.first));
+        },
+        reply: (to, text) => controller.replyToMessage(to.messageId, text),
+      ),
+    );
+  }
+
+  controller = AppController(
     tokens: SecureTokenStore(),
     settingsStore: PrefsSettingsStore(),
     appVersion: appVersion,
-    platform: defaultTargetPlatform == TargetPlatform.windows ? 'windows' : 'android',
+    platform: isWindows ? 'windows' : 'android',
+    hooks: PlatformHooks(
+      launchAtLogin: isWindows ? WindowsLaunchAtLogin() : null,
+      battery: isAndroid ? AndroidBatteryExemption() : null,
+    ),
+    onIncoming: (m) async {
+      // Android: this stream only runs while the app is on screen, so there is nothing to alert about. Windows: alert
+      // unless the window is in front. Either way the user can switch notifications off.
+      final n = notifier;
+      if (n == null || !isWindows || !controller.settings.notifications) return;
+      if (await shell?.isInFront() ?? false) return;
+      await n.showMessage(m, canReply: controller.scopes.canReply);
+    },
   );
-  runApp(NyaApp(controller: controller));
+
+  if (isWindows) {
+    shell = DesktopShell(controller: controller, startHidden: args.contains('--background'));
+    await shell.init();
+  }
+  if (isAndroid) BackgroundCoordinator(controller).attach();
+  if (notifier != null) unawaited(notifier.init());
+
+  runApp(NyaApp(controller: controller, onScan: isAndroid ? scanQrCode : null));
   await controller.start();
 }
+

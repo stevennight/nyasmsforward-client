@@ -29,7 +29,7 @@ class ConnectScreen extends StatefulWidget {
   final String? notice;
 
   /// Scans a pairing QR code (Android). Null hides the button.
-  final Future<String?> Function()? onScan;
+  final Future<String?> Function(BuildContext context)? onScan;
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -169,7 +169,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                           onPressed: _busy
                               ? null
                               : () async {
-                                  final text = await widget.onScan!();
+                                  final text = await widget.onScan!(context);
                                   if (text == null || !mounted) return;
                                   if (!_applyLink(text)) setState(() => _message = '这不是 NyaSmsForward 的配对二维码');
                                 },
