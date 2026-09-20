@@ -11,8 +11,9 @@ export 'connect_request.dart';
 /// Performs the actual pairing / login and returns a message to show, or null on success.
 typedef ConnectHandler = Future<String?> Function(ConnectRequest request);
 
-/// M0 placeholder for the real pairing flow (M2).
-Future<String?> notImplementedYet(ConnectRequest request) async => '输入有效。配对与登录将在 M2 实现。';
+/// Fallback used only when rendering this widget in isolation (for example, a widget preview/test).
+/// The production app always passes [AppController.connect] from `app.dart`.
+Future<String?> notImplementedYet(ConnectRequest request) async => '连接页未绑定连接处理器，请从应用主入口打开。';
 
 /// Shown when the client is not connected: server address plus either a one-time pairing code or the admin
 /// account. Connecting is a one-time step; the resulting token is long-lived (docs/开发计划.md §3.1).
