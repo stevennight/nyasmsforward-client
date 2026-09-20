@@ -43,6 +43,12 @@ class ApiException implements Exception {
     switch (code) {
       case 'invalid_credentials':
         return '密码不正确';
+      case 'totp_required':
+        return '服务器已开启二次验证，请填写动态验证码';
+      case 'invalid_totp':
+        return '动态验证码不正确，请核对手机时间后重试';
+      case 'totp_unavailable':
+        return '服务器无法读取二次验证密钥，请检查服务端配置';
       case 'too_many_attempts':
         return '尝试次数太多，请稍后再试';
       case 'setup_required':
