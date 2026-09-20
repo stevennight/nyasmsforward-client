@@ -255,6 +255,7 @@ class OutboundTask {
 const taskErrorLabels = {
   'policy_denied': '手机的下发策略不允许',
   'recipient_not_recent': '收件人不在手机的“最近来信号码”里',
+  'recipient_not_allowed': '收件人不在手机白名单里',
   'rate_limited': '手机端限速',
   'expired': '任务过期，手机没有及时处理',
   'no_permission': '手机没有授予发送短信权限',

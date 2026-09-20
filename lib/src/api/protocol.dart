@@ -60,6 +60,7 @@ abstract final class ErrorCodes {
   static const tokenExpired = 'token_expired';
   static const scopeDenied = 'scope_denied';
   static const policyDenied = 'policy_denied';
+  static const recipientNotAllowed = 'recipient_not_allowed';
   static const replyNotSupported = 'reply_not_supported';
   static const pairCodeRequired = 'pair_code_required';
 
