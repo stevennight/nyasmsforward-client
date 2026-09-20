@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../session/app_controller.dart';
 import '../session/platform_hooks.dart';
 import '../session/settings_store.dart';
+import '../update/client_updater.dart';
 
 /// Connection settings: the address (with verification), a connection test, notifications, quick replies and signing out.
 class SettingsScreen extends StatefulWidget {
@@ -25,6 +26,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _urlError;
   ({bool ok, String text})? _note;
   bool _busy = false;
+  final _updater = ClientUpdateService();
+  ClientUpdateResult _update = const ClientUpdateIdle();
+  bool _updateBusy = false;
+  String? _updateNote;
 
   AppController get c => widget.controller;
 
@@ -75,6 +80,87 @@ class _SettingsScreenState extends State<SettingsScreen> {
         quickReplies: list.isEmpty ? ClientSettings.defaultQuickReplies : list,
       ),
     );
+  }
+
+  Future<void> _checkUpdates() async {
+    if (_updateBusy) return;
+    setState(() {
+      _updateBusy = true;
+      _updateNote = null;
+      _update = const ClientUpdateChecking();
+    });
+    final result = await _updater.check(c.appVersion);
+    if (!mounted) return;
+    setState(() {
+      _updateBusy = false;
+      _update = result;
+    });
+  }
+
+  Future<void> _installUpdate(ClientUpdate update) async {
+    if (_updateBusy) return;
+    setState(() {
+      _updateBusy = true;
+      _updateNote = '正在下载并校验安装包…';
+    });
+    final result = await _updater.downloadAndInstall(update);
+    if (!mounted) return;
+    setState(() {
+      _updateBusy = false;
+      if (result is ClientInstallStarted) {
+        _updateNote = '安装包已校验，已打开系统安装确认。';
+      } else if (result is ClientInstallPermissionRequired) {
+        _updateNote = '请允许本应用安装未知来源应用，然后再次点击安装。';
+      } else if (result is ClientInstallFailed) {
+        _updateNote = result.message;
+      }
+    });
+  }
+
+  Widget _updateSection(ThemeData theme) {
+    final result = _update;
+    late final Widget body;
+    if (result is ClientUpdateIdle) {
+      body = const Text('可手动检查 GitHub Release 中的最新客户端。');
+    } else if (result is ClientUpdateChecking) {
+      body = const Text('正在检查客户端更新…');
+    } else if (result is ClientUpdateUpToDate) {
+      body = Text('当前已是最新版本 v${result.currentVersion}');
+    } else if (result is ClientUpdateUnsupported) {
+      body = Text(result.reason);
+    } else if (result is ClientUpdateFailed) {
+      body = Text(result.message, style: TextStyle(color: theme.colorScheme.error));
+    } else if (result is ClientUpdateAvailable) {
+      final update = result.update;
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('发现新版本 v${update.version}', style: const TextStyle(fontWeight: FontWeight.w600)),
+          if (update.releaseNotes.isNotEmpty)
+            Text(update.releaseNotes, maxLines: 5, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+          Wrap(
+            spacing: 8,
+            children: [
+              FilledButton(
+                onPressed: _updateBusy ? null : () => _installUpdate(update),
+                child: const Text('下载并安装'),
+              ),
+              OutlinedButton(onPressed: _updateBusy ? null : _checkUpdates, child: const Text('重新检查')),
+            ],
+          ),
+        ],
+      );
+    } else {
+      body = const SizedBox.shrink();
+    }
+    final children = <Widget>[body];
+    if (_updateNote != null) {
+      children.add(Text(_updateNote!, style: theme.textTheme.bodySmall));
+    }
+    if (_update is! ClientUpdateAvailable && _update is! ClientUpdateChecking) {
+      children.add(OutlinedButton(onPressed: _updateBusy ? null : _checkUpdates, child: const Text('检查更新')));
+    }
+    return _Section('应用更新', children);
   }
 
   Future<void> _signOut() async {
@@ -250,6 +336,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ]),
+            if (_updater.supported) _updateSection(theme),
           ],
         ),
       ),
