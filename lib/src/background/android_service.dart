@@ -56,11 +56,19 @@ class MessageWatcher extends TaskHandler {
     }
     _notifier ??= LocalNotificationService(
       // A tap or button of a notification is handled by the app (or the background handler), never by this isolate.
-      handlers: NotificationHandlers(copyCode: (_) async {}, open: (_) {}, reply: (to, text) => replyFromStorage(to.messageId, text)),
+      handlers: NotificationHandlers(
+        copyCode: (_) async {},
+        open: (_) {},
+        reply: (to, text) => replyFromStorage(to.messageId, text),
+      ),
     );
     await _notifier!.init();
     final api = _api = ApiClient(baseUrl: url, token: token);
-    final runner = _runner = EventStreamRunner(client: api, onEvent: _onEvent, onStatus: _onStatus);
+    final runner = _runner = EventStreamRunner(
+      client: api,
+      onEvent: _onEvent,
+      onStatus: _onStatus,
+    );
     unawaited(runner.run());
   }
 
@@ -68,8 +76,16 @@ class MessageWatcher extends TaskHandler {
     switch (e) {
       case MessageEvent(:final message, :final notify):
         // Messages sent on the SIM phone are history for this client and should not make a notification.
-        if (notify && message.isIncoming && _settings.notifications && !_uiForeground) {
-          unawaited(_notifier!.showMessage(message, canReply: _settings.scopes.contains('reply')));
+        if (notify &&
+            message.isIncoming &&
+            _settings.notifications &&
+            !_uiForeground) {
+          unawaited(
+            _notifier!.showMessage(
+              message,
+              canReply: _settings.scopes.contains('reply'),
+            ),
+          );
         }
       case ReadEvent(:final ids) || DeletedEvent(:final ids):
         // Read (or deleted) on another device: the alert is stale.
@@ -91,7 +107,9 @@ class MessageWatcher extends TaskHandler {
   void onReceiveData(Object data) {
     if (data is! Map) return;
     if (data['foreground'] is bool) _uiForeground = data['foreground'] as bool;
-    if (data['reload'] == true) unawaited(_connect()); // address, token or notification setting changed
+    if (data['reload'] == true) {
+      unawaited(_connect()); // address, token or notification setting changed
+    }
   }
 
   @override
@@ -131,35 +149,47 @@ abstract final class AndroidBackground {
   }
 
   /// Must be called once, before `runApp`, so the UI can receive what the service sends.
-  static void initCommunication() => FlutterForegroundTask.initCommunicationPort();
+  static void initCommunication() =>
+      FlutterForegroundTask.initCommunicationPort();
 
   static Future<bool> get isRunning => FlutterForegroundTask.isRunningService;
 
-  static Future<void> start() async {
+  /// Starts the service and reports whether Android accepted the request.
+  ///
+  /// `flutter_foreground_task` returns a [ServiceRequestFailure] instead of
+  /// throwing for many Android-side failures (missing permissions, a vendor
+  /// policy, or a start timeout). The coordinator must not hand the live
+  /// stream away unless the service really started.
+  static Future<bool> start() async {
     _init();
     if (await FlutterForegroundTask.isRunningService) {
       FlutterForegroundTask.sendDataToTask({'reload': true});
-      return;
+      return true;
     }
-    await FlutterForegroundTask.startService(
+    final result = await FlutterForegroundTask.startService(
       serviceId: _serviceId,
       serviceTypes: [ForegroundServiceTypes.specialUse],
       notificationTitle: 'NyaSmsForward',
       notificationText: '已连接，新短信会通知你',
       callback: backgroundServiceEntry,
     );
+    return result is ServiceRequestSuccess;
   }
 
   static Future<void> stop() async {
     _init();
-    if (await FlutterForegroundTask.isRunningService) await FlutterForegroundTask.stopService();
+    if (await FlutterForegroundTask.isRunningService) {
+      await FlutterForegroundTask.stopService();
+    }
   }
 
   /// Tells the service whether the app is on screen (then the app shows messages itself and the service stays quiet).
-  static void setForeground(bool foreground) => FlutterForegroundTask.sendDataToTask({'foreground': foreground});
+  static void setForeground(bool foreground) =>
+      FlutterForegroundTask.sendDataToTask({'foreground': foreground});
 
   /// Settings, address or token changed: the service reconnects with the new ones.
-  static void reload() => FlutterForegroundTask.sendDataToTask({'reload': true});
+  static void reload() =>
+      FlutterForegroundTask.sendDataToTask({'reload': true});
 
   /// Android may stop background connections to save power; being exempt keeps notifications reliable.
   static Future<bool> requestBatteryExemption() async {
@@ -167,7 +197,8 @@ abstract final class AndroidBackground {
     return FlutterForegroundTask.requestIgnoreBatteryOptimization();
   }
 
-  static Future<bool> get batteryExempt => FlutterForegroundTask.isIgnoringBatteryOptimizations;
+  static Future<bool> get batteryExempt =>
+      FlutterForegroundTask.isIgnoringBatteryOptimizations;
 }
 
 /// [BatteryExemption] on top of the foreground-service plugin.

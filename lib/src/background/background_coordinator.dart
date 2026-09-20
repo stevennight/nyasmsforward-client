@@ -34,7 +34,10 @@ class BackgroundCoordinator with WidgetsBindingObserver {
   }
 
   bool get _wanted =>
-      controller.phase == AppPhase.ready && controller.settings.notifications && controller.scopes.canRead && controller.settings.serverUrl != null;
+      controller.phase == AppPhase.ready &&
+      controller.settings.notifications &&
+      controller.scopes.canRead &&
+      controller.settings.serverUrl != null;
 
   void _onController() {
     final url = controller.settings.serverUrl;
@@ -55,13 +58,21 @@ class BackgroundCoordinator with WidgetsBindingObserver {
       do {
         _syncAgain = false;
         if (_wanted && !_serviceRunning) {
-          await AndroidBackground.start();
-          _serviceRunning = true;
-          AndroidBackground.setForeground(_isForeground);
+          final started = await AndroidBackground.start();
+          if (started) {
+            _serviceRunning = true;
+            AndroidBackground.setForeground(_isForeground);
+          } else {
+            // Keep the UI stream alive when Android rejected the service.
+            // The next lifecycle transition/controller update can retry it.
+            _serviceRunning = false;
+          }
         } else if (!_wanted && _serviceRunning) {
           await AndroidBackground.stop();
           _serviceRunning = false;
-          controller.setForeground(true); // nobody else holds the connection any more
+          controller.setForeground(
+            true,
+          ); // nobody else holds the connection any more
         } else if (_serviceRunning && reload) {
           AndroidBackground.reload();
         }
@@ -84,7 +95,8 @@ class BackgroundCoordinator with WidgetsBindingObserver {
       _isForeground = true;
       if (_serviceRunning) AndroidBackground.setForeground(true);
       controller.setForeground(true);
-    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
       _isForeground = false;
       if (_serviceRunning) {
         AndroidBackground.setForeground(false);

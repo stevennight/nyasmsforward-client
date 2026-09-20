@@ -17,7 +17,7 @@ import 'src/session/settings_store.dart';
 import 'src/ui/format.dart';
 
 /// Keep in sync with pubspec.yaml (`tool/check_version.dart` verifies the release).
-const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.2.2');
+const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.2.3');
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,8 +37,12 @@ Future<void> main(List<String> args) async {
         },
         open: (to) {
           unawaited(shell?.showAndFocus());
-          final match = controller.conversations.where((c) => c.deviceId == to.deviceId && c.peerKey == to.peerKey);
-          if (match.isNotEmpty) unawaited(controller.openConversation(match.first));
+          final match = controller.conversations.where(
+            (c) => c.deviceId == to.deviceId && c.peerKey == to.peerKey,
+          );
+          if (match.isNotEmpty) {
+            unawaited(controller.openConversation(match.first));
+          }
         },
         reply: (to, text) => controller.replyToMessage(to.messageId, text),
       ),
@@ -55,17 +59,22 @@ Future<void> main(List<String> args) async {
       battery: isAndroid ? AndroidBatteryExemption() : null,
     ),
     onIncoming: (m) async {
-      // Android: this stream only runs while the app is on screen, so there is nothing to alert about. Windows: alert
-      // unless the window is in front. Either way the user can switch notifications off.
+      // Android normally stays quiet while the app is on screen, but the user
+      // can opt into a system notification there as well. Windows alerts only
+      // when its window is not in front.
       final n = notifier;
-      if (n == null || !isWindows || !controller.settings.notifications) return;
-      if (await shell?.isInFront() ?? false) return;
+      if (n == null || !controller.settings.notifications) return;
+      if (isAndroid && !controller.settings.foregroundNotifications) return;
+      if (isWindows && (await shell?.isInFront() ?? false)) return;
       await n.showMessage(m, canReply: controller.scopes.canReply);
     },
   );
 
   if (isWindows) {
-    shell = DesktopShell(controller: controller, startHidden: args.contains('--background'));
+    shell = DesktopShell(
+      controller: controller,
+      startHidden: args.contains('--background'),
+    );
     await shell.init();
   }
   if (isAndroid) BackgroundCoordinator(controller).attach();
@@ -74,4 +83,3 @@ Future<void> main(List<String> args) async {
   runApp(NyaApp(controller: controller, onScan: isAndroid ? scanQrCode : null));
   await controller.start();
 }
-

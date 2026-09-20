@@ -13,19 +13,27 @@ class ClientSettings {
     this.deviceId,
     this.scopes = const {},
     this.notifications = true,
+    this.foregroundNotifications = false,
     this.minimizeToTray = true,
     this.quickReplies = defaultQuickReplies,
   });
 
   factory ClientSettings.fromJson(Map<String, Object?> j) => ClientSettings(
-        serverUrl: j['serverUrl'] as String?,
-        deviceName: j['deviceName'] as String?,
-        deviceId: j['deviceId'] as String?,
-        scopes: {for (final s in (j['scopes'] as List?) ?? const []) if (s is String) s},
-        notifications: j['notifications'] != false,
-        minimizeToTray: j['minimizeToTray'] != false,
-        quickReplies: [for (final q in (j['quickReplies'] as List?) ?? defaultQuickReplies) if (q is String && q.isNotEmpty) q],
-      );
+    serverUrl: j['serverUrl'] as String?,
+    deviceName: j['deviceName'] as String?,
+    deviceId: j['deviceId'] as String?,
+    scopes: {
+      for (final s in (j['scopes'] as List?) ?? const [])
+        if (s is String) s,
+    },
+    notifications: j['notifications'] != false,
+    foregroundNotifications: j['foregroundNotifications'] == true,
+    minimizeToTray: j['minimizeToTray'] != false,
+    quickReplies: [
+      for (final q in (j['quickReplies'] as List?) ?? defaultQuickReplies)
+        if (q is String && q.isNotEmpty) q,
+    ],
+  );
 
   static const defaultQuickReplies = ['TD', 'Y', 'N', '1'];
 
@@ -36,6 +44,10 @@ class ClientSettings {
 
   /// Show a notification for new messages.
   final bool notifications;
+
+  /// Android: also show a system notification while the app is on screen.
+  /// Off by default to preserve the quiet foreground behaviour.
+  final bool foregroundNotifications;
 
   /// Windows: closing the window keeps the app running in the tray.
   final bool minimizeToTray;
@@ -49,29 +61,32 @@ class ClientSettings {
     String? deviceId,
     Set<String>? scopes,
     bool? notifications,
+    bool? foregroundNotifications,
     bool? minimizeToTray,
     List<String>? quickReplies,
     bool clearIdentity = false,
-  }) =>
-      ClientSettings(
-        serverUrl: serverUrl ?? this.serverUrl,
-        deviceName: deviceName ?? this.deviceName,
-        deviceId: clearIdentity ? null : (deviceId ?? this.deviceId),
-        scopes: clearIdentity ? const {} : (scopes ?? this.scopes),
-        notifications: notifications ?? this.notifications,
-        minimizeToTray: minimizeToTray ?? this.minimizeToTray,
-        quickReplies: quickReplies ?? this.quickReplies,
-      );
+  }) => ClientSettings(
+    serverUrl: serverUrl ?? this.serverUrl,
+    deviceName: deviceName ?? this.deviceName,
+    deviceId: clearIdentity ? null : (deviceId ?? this.deviceId),
+    scopes: clearIdentity ? const {} : (scopes ?? this.scopes),
+    notifications: notifications ?? this.notifications,
+    foregroundNotifications:
+        foregroundNotifications ?? this.foregroundNotifications,
+    minimizeToTray: minimizeToTray ?? this.minimizeToTray,
+    quickReplies: quickReplies ?? this.quickReplies,
+  );
 
   Map<String, Object?> toJson() => {
-        'serverUrl': serverUrl,
-        'deviceName': deviceName,
-        'deviceId': deviceId,
-        'scopes': scopes.toList()..sort(),
-        'notifications': notifications,
-        'minimizeToTray': minimizeToTray,
-        'quickReplies': quickReplies,
-      };
+    'serverUrl': serverUrl,
+    'deviceName': deviceName,
+    'deviceId': deviceId,
+    'scopes': scopes.toList()..sort(),
+    'notifications': notifications,
+    'foregroundNotifications': foregroundNotifications,
+    'minimizeToTray': minimizeToTray,
+    'quickReplies': quickReplies,
+  };
 }
 
 abstract interface class SettingsStore {
@@ -87,7 +102,9 @@ class PrefsSettingsStore implements SettingsStore {
     final raw = (await SharedPreferences.getInstance()).getString(_key);
     if (raw == null) return const ClientSettings();
     try {
-      return ClientSettings.fromJson((jsonDecode(raw) as Map).cast<String, Object?>());
+      return ClientSettings.fromJson(
+        (jsonDecode(raw) as Map).cast<String, Object?>(),
+      );
     } on Object {
       return const ClientSettings(); // a damaged value must not stop the app from starting
     }
@@ -95,7 +112,10 @@ class PrefsSettingsStore implements SettingsStore {
 
   @override
   Future<void> save(ClientSettings settings) async =>
-      (await SharedPreferences.getInstance()).setString(_key, jsonEncode(settings.toJson()));
+      (await SharedPreferences.getInstance()).setString(
+        _key,
+        jsonEncode(settings.toJson()),
+      );
 }
 
 class MemorySettingsStore implements SettingsStore {

@@ -16,8 +16,12 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late final _url = TextEditingController(text: widget.controller.settings.serverUrl ?? '');
-  late final _quick = TextEditingController(text: widget.controller.settings.quickReplies.join('，'));
+  late final _url = TextEditingController(
+    text: widget.controller.settings.serverUrl ?? '',
+  );
+  late final _quick = TextEditingController(
+    text: widget.controller.settings.quickReplies.join('，'),
+  );
   String? _urlError;
   ({bool ok, String text})? _note;
   bool _busy = false;
@@ -60,8 +64,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _saveQuick() {
-    final list = _quick.text.split(RegExp(r'[,，\n]')).map((s) => s.trim()).where((s) => s.isNotEmpty).take(8).toList();
-    c.updateSettings(c.settings.copyWith(quickReplies: list.isEmpty ? ClientSettings.defaultQuickReplies : list));
+    final list = _quick.text
+        .split(RegExp(r'[,，\n]'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .take(8)
+        .toList();
+    c.updateSettings(
+      c.settings.copyWith(
+        quickReplies: list.isEmpty ? ClientSettings.defaultQuickReplies : list,
+      ),
+    );
   }
 
   Future<void> _signOut() async {
@@ -71,8 +84,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('断开连接？'),
         content: const Text('将清除本机的登录令牌，之后需要重新连接才能查看短信。服务器上的短信不受影响。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          TextButton(key: const Key('confirmSignOut'), onPressed: () => Navigator.pop(context, true), child: const Text('断开')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            key: const Key('confirmSignOut'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('断开'),
+          ),
         ],
       ),
     );
@@ -85,7 +105,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final s = c.settings;
-    final scopes = [if (c.scopes.canRead) '查看', if (c.scopes.canReply) '回复', if (c.scopes.canSend) '新发'];
+    final scopes = [
+      if (c.scopes.canRead) '查看',
+      if (c.scopes.canReply) '回复',
+      if (c.scopes.canSend) '新发',
+    ];
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: ListenableBuilder(
@@ -107,28 +131,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               Text(
                 '换域名或端口不需要重新连接：令牌和地址无关。新地址只有在那台服务器认得这个客户端时才会保存，输错了也不会被锁在外面。',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               Wrap(
                 spacing: 8,
                 children: [
                   FilledButton(
                     key: const Key('saveUrl'),
-                    style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
-                    onPressed: _busy || _url.text.trim() == s.serverUrl ? null : _saveUrl,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 40),
+                    ),
+                    onPressed: _busy || _url.text.trim() == s.serverUrl
+                        ? null
+                        : _saveUrl,
                     child: const Text('保存并验证'),
                   ),
-                  OutlinedButton(key: const Key('testConnection'), onPressed: _busy ? null : _test, child: const Text('测试连接')),
+                  OutlinedButton(
+                    key: const Key('testConnection'),
+                    onPressed: _busy ? null : _test,
+                    child: const Text('测试连接'),
+                  ),
                 ],
               ),
               if (_note != null)
-                Text(_note!.text, key: const Key('settingsNote'), style: TextStyle(color: _note!.ok ? theme.colorScheme.primary : theme.colorScheme.error)),
+                Text(
+                  _note!.text,
+                  key: const Key('settingsNote'),
+                  style: TextStyle(
+                    color: _note!.ok
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.error,
+                  ),
+                ),
             ]),
             _Section('这个客户端', [
-              Text(s.deviceName ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
-              Text('权限：${scopes.isEmpty ? '无' : scopes.join('、')}（由管理员在 Web 设备页设置）'),
-              Text('登录令牌：长期有效，不会自动过期，加密保存在本机。', style: theme.textTheme.bodySmall),
-              if (c.me?.serverVersion != null) Text('服务器版本 ${c.me!.serverVersion}', style: theme.textTheme.bodySmall),
+              Text(
+                s.deviceName ?? '',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                '权限：${scopes.isEmpty ? '无' : scopes.join('、')}（由管理员在 Web 设备页设置）',
+              ),
+              Text(
+                '登录令牌：长期有效，不会自动过期，加密保存在本机。',
+                style: theme.textTheme.bodySmall,
+              ),
+              if (c.me?.serverVersion != null)
+                Text(
+                  '服务器版本 ${c.me!.serverVersion}',
+                  style: theme.textTheme.bodySmall,
+                ),
             ]),
             _Section('通知', [
               SwitchListTile(
@@ -137,8 +191,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('新短信通知'),
                 subtitle: const Text('验证码短信的通知里可以直接复制验证码，也可以直接回复'),
                 value: s.notifications,
-                onChanged: (v) => c.updateSettings(s.copyWith(notifications: v)),
+                onChanged: (v) =>
+                    c.updateSettings(s.copyWith(notifications: v)),
               ),
+              if (defaultTargetPlatform == TargetPlatform.android)
+                SwitchListTile(
+                  key: const Key('foregroundNotifySwitch'),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('前台也弹出通知'),
+                  subtitle: const Text('应用正在屏幕上时也显示系统通知；是否悬浮显示还受系统通知设置控制'),
+                  value: s.foregroundNotifications,
+                  onChanged: s.notifications
+                      ? (v) => c.updateSettings(
+                          s.copyWith(foregroundNotifications: v),
+                        )
+                      : null,
+                ),
               if (defaultTargetPlatform == TargetPlatform.windows)
                 SwitchListTile(
                   key: const Key('trayswitch'),
@@ -146,29 +214,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: const Text('关闭窗口时留在托盘'),
                   subtitle: const Text('关闭主窗口后继续接收短信并弹出通知；在托盘图标上选择“退出”才会完全关闭'),
                   value: s.minimizeToTray,
-                  onChanged: (v) => c.updateSettings(s.copyWith(minimizeToTray: v)),
+                  onChanged: (v) =>
+                      c.updateSettings(s.copyWith(minimizeToTray: v)),
                 ),
             ]),
             if (c.hooks.launchAtLogin != null || c.hooks.battery != null)
               _Section('后台运行', [
-                if (c.hooks.launchAtLogin != null) _LaunchAtLoginSwitch(hook: c.hooks.launchAtLogin!),
-                if (c.hooks.battery != null) _BatteryTile(hook: c.hooks.battery!),
+                if (c.hooks.launchAtLogin != null)
+                  _LaunchAtLoginSwitch(hook: c.hooks.launchAtLogin!),
+                if (c.hooks.battery != null)
+                  _BatteryTile(hook: c.hooks.battery!),
               ]),
             _Section('快捷回复', [
               TextField(
                 key: const Key('quickField'),
                 controller: _quick,
-                decoration: const InputDecoration(helperText: '用逗号分隔，最多 8 个。点一下填进回复框，仍需要你确认发送'),
+                decoration: const InputDecoration(
+                  helperText: '用逗号分隔，最多 8 个。点一下填进回复框，仍需要你确认发送',
+                ),
                 onSubmitted: (_) => _saveQuick(),
                 onEditingComplete: _saveQuick,
               ),
             ]),
             _Section('断开连接', [
-              Text('清除本机的令牌。服务器地址和设备名称会保留，重新连接更快。', style: theme.textTheme.bodySmall),
+              Text(
+                '清除本机的令牌。服务器地址和设备名称会保留，重新连接更快。',
+                style: theme.textTheme.bodySmall,
+              ),
               OutlinedButton(
                 key: const Key('signOut'),
                 onPressed: _signOut,
-                child: Text('断开并清除令牌', style: TextStyle(color: theme.colorScheme.error)),
+                child: Text(
+                  '断开并清除令牌',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
               ),
             ]),
           ],
@@ -194,9 +273,15 @@ class _Section extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(title, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            Text(
+              title,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 8),
-            for (final w in children) Padding(padding: const EdgeInsets.only(bottom: 8), child: w),
+            for (final w in children)
+              Padding(padding: const EdgeInsets.only(bottom: 8), child: w),
           ],
         ),
       ),
@@ -228,28 +313,32 @@ class _LaunchAtLoginSwitchState extends State<_LaunchAtLoginSwitch> {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SwitchListTile(
-            key: const Key('launchAtLogin'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('开机自启'),
-            subtitle: const Text('登录 Windows 后自动在托盘里运行，这样不用打开窗口也能收到新短信通知'),
-            value: _on ?? false,
-            onChanged: _on == null
-                ? null
-                : (v) async {
-                    try {
-                      await widget.hook.set(v);
-                      if (mounted) setState(() => _on = v);
-                    } on Object {
-                      if (mounted) setState(() => _problem = '设置失败，可能被安全软件拦截');
-                    }
-                  },
-          ),
-          if (_problem != null) Text(_problem!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SwitchListTile(
+        key: const Key('launchAtLogin'),
+        contentPadding: EdgeInsets.zero,
+        title: const Text('开机自启'),
+        subtitle: const Text('登录 Windows 后自动在托盘里运行，这样不用打开窗口也能收到新短信通知'),
+        value: _on ?? false,
+        onChanged: _on == null
+            ? null
+            : (v) async {
+                try {
+                  await widget.hook.set(v);
+                  if (mounted) setState(() => _on = v);
+                } on Object {
+                  if (mounted) setState(() => _problem = '设置失败，可能被安全软件拦截');
+                }
+              },
+      ),
+      if (_problem != null)
+        Text(
+          _problem!,
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+    ],
+  );
 }
 
 /// Android: exempt the app from battery optimisation so the background connection is not stopped.
@@ -285,11 +374,17 @@ class _BatteryTileState extends State<_BatteryTile> {
         const Text('后台连接'),
         Text(
           '应用在后台时由一个常驻通知保持与服务器的连接，新短信才能及时通知你。系统的省电策略可能会停掉它，建议允许“不受电池优化限制”；部分国产系统还需要允许自启动和后台运行。',
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 8),
         if (_exempt == true)
-          Text('已允许不受电池优化限制', key: const Key('batteryOk'), style: TextStyle(color: theme.colorScheme.primary))
+          Text(
+            '已允许不受电池优化限制',
+            key: const Key('batteryOk'),
+            style: TextStyle(color: theme.colorScheme.primary),
+          )
         else
           OutlinedButton(
             key: const Key('batteryRequest'),
