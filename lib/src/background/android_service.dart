@@ -34,6 +34,7 @@ class MessageWatcher extends TaskHandler {
   LocalNotificationService? _notifier;
   ClientSettings _settings = const ClientSettings();
   bool _uiForeground = false;
+  final _notifiedUnread = <int>{};
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -67,6 +68,11 @@ class MessageWatcher extends TaskHandler {
     final runner = _runner = EventStreamRunner(
       client: api,
       onEvent: _onEvent,
+      onConnected: () {
+        // A new service isolate has no Last-Event-ID. Fetch unread rows so a
+        // service restart cannot strand a message until the UI is opened.
+        if (!_uiForeground) unawaited(_notifyUnread(api));
+      },
       onStatus: _onStatus,
     );
     unawaited(runner.run());
@@ -96,10 +102,37 @@ class MessageWatcher extends TaskHandler {
   }
 
   void _onStatus(StreamStatus s) {
+    if (s == StreamStatus.live) {
+      FlutterForegroundTask.sendDataToMain({'service': 'live'});
+    } else if (s == StreamStatus.waiting) {
+      // The service exists, but its socket is not currently live. The UI can
+      // temporarily keep its own stream as a fallback.
+      FlutterForegroundTask.sendDataToMain({'service': 'waiting'});
+    }
     if (s == StreamStatus.tokenDead || s == StreamStatus.forbidden) {
       // The UI decides what to show (it signs out on a dead token); the service has nothing left to watch.
       FlutterForegroundTask.sendDataToMain({'stopped': s.name});
       unawaited(FlutterForegroundTask.stopService());
+    }
+  }
+
+  Future<void> _notifyUnread(ApiClient api) async {
+    if (!_settings.notifications || _uiForeground) return;
+    try {
+      for (final message in await api.unreadMessages()) {
+        if (!message.isIncoming || message.backfill || !_notifiedUnread.add(message.id)) continue;
+        await _notifier?.showMessage(
+          message,
+          canReply: _settings.scopes.contains('reply'),
+        );
+      }
+      if (_notifiedUnread.length > 512) {
+        _notifiedUnread.removeAll(
+          _notifiedUnread.take(_notifiedUnread.length - 256).toList(),
+        );
+      }
+    } on Object {
+      // A transient REST failure must not take down the live stream.
     }
   }
 
@@ -117,6 +150,7 @@ class MessageWatcher extends TaskHandler {
 
   @override
   Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
+    FlutterForegroundTask.sendDataToMain({'service': 'stopped'});
     _runner?.stop();
     _api?.close();
   }

@@ -15,6 +15,7 @@ class BackgroundCoordinator with WidgetsBindingObserver {
 
   final AppController controller;
   bool _serviceRunning = false;
+  bool _serviceLive = false;
   bool _syncing = false, _syncAgain = false;
   String? _lastUrl;
   bool _lastNotifications = true;
@@ -61,6 +62,7 @@ class BackgroundCoordinator with WidgetsBindingObserver {
           final started = await AndroidBackground.start();
           if (started) {
             _serviceRunning = true;
+            _serviceLive = false;
             AndroidBackground.setForeground(_isForeground);
           } else {
             // Keep the UI stream alive when Android rejected the service.
@@ -70,6 +72,7 @@ class BackgroundCoordinator with WidgetsBindingObserver {
         } else if (!_wanted && _serviceRunning) {
           await AndroidBackground.stop();
           _serviceRunning = false;
+          _serviceLive = false;
           controller.setForeground(
             true,
           ); // nobody else holds the connection any more
@@ -93,18 +96,20 @@ class BackgroundCoordinator with WidgetsBindingObserver {
     // Only hand the connection to the service when it really runs; otherwise the app keeps it and nothing is lost.
     if (foreground) {
       _isForeground = true;
+      controller.setAppVisible(true);
       if (_serviceRunning) AndroidBackground.setForeground(true);
       controller.setForeground(true);
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _isForeground = false;
-      if (_serviceRunning) {
+      controller.setAppVisible(false);
+      if (_serviceRunning && _serviceLive) {
         AndroidBackground.setForeground(false);
         controller.setForeground(false);
       } else {
-        // A service start can be rejected by Android (missing permission, a vendor battery policy, or a race while
-        // the app is leaving the foreground). Keep the app's stream alive in that case, and retry the service start;
-        // stopping the only live stream here would make background notifications disappear completely.
+        // Do not stop the UI stream until the service has reported a live SSE
+        // connection. This closes the start-up handoff gap and gives us a
+        // fallback while a vendor ROM is restarting the service.
         unawaited(_sync(reload: true));
       }
     }
@@ -112,7 +117,28 @@ class BackgroundCoordinator with WidgetsBindingObserver {
 
   /// The service ended by itself (the token was rejected, or the read permission is gone): let the app find out why.
   void _onServiceData(Object data) {
-    if (data is Map && data['stopped'] != null) {
+    if (data is! Map) return;
+    switch (data['service']) {
+      case 'live':
+        _serviceLive = true;
+        if (!_isForeground) controller.setForeground(false);
+        return;
+      case 'waiting':
+        _serviceLive = false;
+        if (!_isForeground) {
+          // Keep notifications working while the foreground service retries.
+          controller.setForeground(true);
+        }
+        return;
+      case 'stopped':
+        _serviceLive = false;
+        _serviceRunning = false;
+        controller.setForeground(true);
+        unawaited(_sync(reload: true));
+        return;
+    }
+    if (data['stopped'] != null) {
+      _serviceLive = false;
       _serviceRunning = false;
       controller.setForeground(true);
       unawaited(controller.refreshAll());

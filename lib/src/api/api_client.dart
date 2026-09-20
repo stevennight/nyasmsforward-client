@@ -161,6 +161,21 @@ class ApiClient {
     return items;
   }
 
+  /// Newest unread incoming messages, used when a background service starts
+  /// without a previous SSE Last-Event-ID to replay.
+  Future<List<Message>> unreadMessages({int limit = 50}) async {
+    final j = await _send('GET', '/api/v1/messages', query: {
+      'unread': '1',
+      'limit': '$limit',
+    });
+    final items = [
+      for (final m in (j['items'] as List?) ?? const [])
+        Message.fromJson((m as Map).cast<String, Object?>()),
+    ];
+    items.sort((a, b) => a.id.compareTo(b.id));
+    return items;
+  }
+
   Future<List<Phone>> phones() async {
     final j = await _send('GET', '/api/v1/phones');
     return [for (final p in (j['items'] as List?) ?? const []) Phone.fromJson((p as Map).cast<String, Object?>())];

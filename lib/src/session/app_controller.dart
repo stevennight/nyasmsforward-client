@@ -512,6 +512,16 @@ class AppController extends ChangeNotifier {
 
   bool _foreground = true;
 
+  /// Whether the Android activity is visible. This is separate from
+  /// [_foreground], which means that this isolate currently owns the stream;
+  /// the UI stream may also be active as a fallback while the service retries.
+  bool _appVisible = true;
+  bool get appVisible => _appVisible;
+
+  void setAppVisible(bool visible) {
+    _appVisible = visible;
+  }
+
   /// Android: while the app is in the background a foreground service holds the connection and shows the notifications,
   /// so this stream closes (one connection at a time, and no double alerts); coming back reconnects and catches up.
   void setForeground(bool foreground) {
