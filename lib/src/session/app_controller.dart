@@ -552,16 +552,18 @@ class AppController extends ChangeNotifier {
   /// address. It is only saved when the server there recognises this very device, so a typo cannot lock the client out.
   Future<String?> changeServerUrl(String raw) async {
     final checked = ServerUrl.validate(raw);
-    if (checked is ServerUrlInvalid)
+    if (checked is ServerUrlInvalid) {
       return serverUrlProblemText(checked.problem);
+    }
     final url = (checked as ServerUrlOk).url;
     final token = await tokens.read();
     if (token == null) return '还没有连接';
     final probe = _newApi(url, token);
     try {
       final who = await probe.me();
-      if (who.deviceId != settings.deviceId)
+      if (who.deviceId != settings.deviceId) {
         return '那个地址上的服务器不认识这个客户端（设备不一致），没有保存。换服务器请重新连接';
+      }
       settings = settings.copyWith(serverUrl: url);
       await settingsStore.save(settings);
       await _stopLive();
@@ -593,7 +595,9 @@ class AppController extends ChangeNotifier {
 
   void setMessageSelection(bool enabled) {
     selectingMessages = enabled;
-    if (!enabled) selectedMessageIds = <int>{};
+    if (!enabled) {
+      selectedMessageIds = <int>{};
+    }
     if (enabled) {
       selectingConversations = false;
       selectedConversations = <String, Conversation>{};
@@ -603,7 +607,9 @@ class AppController extends ChangeNotifier {
 
   void setConversationSelection(bool enabled) {
     selectingConversations = enabled;
-    if (!enabled) selectedConversations = <String, Conversation>{};
+    if (!enabled) {
+      selectedConversations = <String, Conversation>{};
+    }
     if (enabled) {
       selectingMessages = false;
       selectedMessageIds = <int>{};
@@ -632,10 +638,11 @@ class AppController extends ChangeNotifier {
   void selectCurrentThread() {
     final ids = thread.map((m) => m.id).toSet();
     final next = {...selectedMessageIds};
-    if (ids.every(next.contains))
+    if (ids.every(next.contains)) {
       next.removeAll(ids);
-    else
+    } else {
       next.addAll(ids);
+    }
     selectedMessageIds = next;
     notifyListeners();
   }

@@ -193,10 +193,13 @@ class _RecycleBinDialogState extends State<RecycleBinDialog> {
       child: FutureBuilder<List<Message>>(
         future: _items,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done)
+          if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
+          }
           final items = snapshot.data ?? const <Message>[];
-          if (items.isEmpty) return const Text('回收站为空。删除的短信保留 30 天。');
+          if (items.isEmpty) {
+            return const Text('回收站为空。删除的短信保留 30 天。');
+          }
           return ListView.builder(
             shrinkWrap: true,
             itemCount: items.length,
@@ -212,12 +215,15 @@ class _RecycleBinDialogState extends State<RecycleBinDialog> {
                 trailing: TextButton(
                   onPressed: () async {
                     final error = await widget.controller.restoreMessage(m.id);
-                    if (!mounted) return;
-                    if (error != null)
+                    if (!context.mounted) {
+                      return;
+                    }
+                    if (error != null) {
                       ScaffoldMessenger.of(context)
                           .showSnackBar(SnackBar(content: Text(error)));
-                    else
+                    } else {
                       _reload();
+                    }
                   },
                   child: const Text('恢复'),
                 ),
@@ -258,10 +264,19 @@ Future<void> _confirmDelete(
       ],
     ),
   );
-  if (okay != true || !context.mounted) return;
+  if (okay != true) {
+    return;
+  }
+  if (!context.mounted) {
+    return;
+  }
   final error = await controller.deleteSelectedMessages();
-  if (error != null && context.mounted)
+  if (!context.mounted) {
+    return;
+  }
+  if (error != null) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  }
 }
 
 Future<void> _confirmConversationDelete(
@@ -286,10 +301,19 @@ Future<void> _confirmConversationDelete(
       ],
     ),
   );
-  if (okay != true || !context.mounted) return;
+  if (okay != true) {
+    return;
+  }
+  if (!context.mounted) {
+    return;
+  }
   final error = await controller.deleteSelectedConversations();
-  if (error != null && context.mounted)
+  if (!context.mounted) {
+    return;
+  }
+  if (error != null) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  }
 }
 
 class BannerStrip extends StatelessWidget {

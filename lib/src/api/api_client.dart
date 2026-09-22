@@ -26,8 +26,9 @@ class ApiException implements Exception {
   final String? message;
 
   ConnectionVerdict get verdict {
-    if (kind == FailureKind.notOurServer)
+    if (kind == FailureKind.notOurServer) {
       return ConnectionVerdict.addressSuspect;
+    }
     return Connection.classify(httpStatus: status, errorCode: code);
   }
 
@@ -439,17 +440,21 @@ class ApiClient {
           message: 'redirect',
         );
       }
-      if (response.statusCode >= 400)
+      if (response.statusCode >= 400) {
         throw _httpFailure(response.statusCode, text);
-      if (response.statusCode == 204 || text.isEmpty) return const {};
+      }
+      if (response.statusCode == 204 || text.isEmpty) {
+        return const {};
+      }
       final decoded = jsonDecode(text);
       // A 2xx that is not our JSON: a captive portal, a proxy's landing page, the wrong service on that port.
-      if (decoded is! Map)
+      if (decoded is! Map) {
         throw ApiException(
           kind: FailureKind.notOurServer,
           status: response.statusCode,
           message: 'unexpected body',
         );
+      }
       return decoded.cast<String, Object?>();
     } on ApiException {
       rethrow;
