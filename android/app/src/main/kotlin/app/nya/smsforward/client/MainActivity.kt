@@ -16,17 +16,34 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
-            if (call.method != "installApk") {
-                result.notImplemented()
-                return@setMethodCallHandler
+            when (call.method) {
+                "updatesCacheDirectory" -> {
+                    try {
+                        result.success(updatesCacheDirectory().canonicalPath)
+                    } catch (e: Exception) {
+                        result.error("cache_unavailable", e.message ?: "无法创建更新缓存目录", null)
+                    }
+                }
+                "installApk" -> {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrBlank()) {
+                        result.error("bad_path", "APK 路径为空", null)
+                        return@setMethodCallHandler
+                    }
+                    installApk(path, result)
+                }
+                else -> result.notImplemented()
             }
-            val path = call.argument<String>("path")
-            if (path.isNullOrBlank()) {
-                result.error("bad_path", "APK 路径为空", null)
-                return@setMethodCallHandler
-            }
-            installApk(path, result)
         }
+    }
+
+    private fun updatesCacheDirectory(): File {
+        val directory = File(cacheDir, "nyasmsforward-updates")
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw IllegalStateException("无法创建更新缓存目录")
+        }
+        require(directory.isDirectory) { "更新缓存目录不可用" }
+        return directory
     }
 
     private fun installApk(path: String, result: MethodChannel.Result) {
