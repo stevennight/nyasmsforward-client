@@ -11,14 +11,18 @@ String? _str(Object? v) => v is String ? v : null;
 class Sim {
   const Sim({required this.slot, this.subscriptionId, this.label});
 
-  factory Sim.fromJson(Map<String, Object?> j) =>
-      Sim(slot: _int(j['slot']) ?? 0, subscriptionId: _int(j['subscriptionId']), label: _str(j['label']));
+  factory Sim.fromJson(Map<String, Object?> j) => Sim(
+    slot: _int(j['slot']) ?? 0,
+    subscriptionId: _int(j['subscriptionId']),
+    label: _str(j['label']),
+  );
 
   final int slot;
   final int? subscriptionId;
   final String? label;
 
-  String get title => label == null || label!.isEmpty ? 'SIM$slot' : 'SIM$slot · $label';
+  String get title =>
+      label == null || label!.isEmpty ? 'SIM$slot' : 'SIM$slot · $label';
 }
 
 enum Direction { incoming, outgoing }
@@ -42,20 +46,22 @@ class Message {
   });
 
   factory Message.fromJson(Map<String, Object?> j) => Message(
-        id: _int(j['id']) ?? 0,
-        deviceId: _str(j['deviceId']) ?? '',
-        direction: j['direction'] == 'out' ? Direction.outgoing : Direction.incoming,
-        origin: _str(j['origin']) ?? 'device',
-        peer: _str(j['peer']) ?? '',
-        peerKey: _str(j['peerKey']) ?? '',
-        body: _str(j['body']) ?? '',
-        simSlot: _int(j['simSlot']),
-        replyTo: _int(j['replyTo']),
-        deviceTime: _int(j['deviceTime']) ?? 0,
-        code: _str(j['code']),
-        readAt: _int(j['readAt']),
-        backfill: j['backfill'] == true,
-      );
+    id: _int(j['id']) ?? 0,
+    deviceId: _str(j['deviceId']) ?? '',
+    direction: j['direction'] == 'out'
+        ? Direction.outgoing
+        : Direction.incoming,
+    origin: _str(j['origin']) ?? 'device',
+    peer: _str(j['peer']) ?? '',
+    peerKey: _str(j['peerKey']) ?? '',
+    body: _str(j['body']) ?? '',
+    simSlot: _int(j['simSlot']),
+    replyTo: _int(j['replyTo']),
+    deviceTime: _int(j['deviceTime']) ?? 0,
+    code: _str(j['code']),
+    readAt: _int(j['readAt']),
+    backfill: j['backfill'] == true,
+  );
 
   final int id;
   final String deviceId;
@@ -79,26 +85,27 @@ class Message {
   bool get isUnread => isIncoming && readAt == null;
 
   Message copyWith({int? readAt}) => Message(
-        id: id,
-        deviceId: deviceId,
-        direction: direction,
-        origin: origin,
-        peer: peer,
-        peerKey: peerKey,
-        body: body,
-        deviceTime: deviceTime,
-        simSlot: simSlot,
-        replyTo: replyTo,
-        code: code,
-        readAt: readAt ?? this.readAt,
-        backfill: backfill,
-      );
+    id: id,
+    deviceId: deviceId,
+    direction: direction,
+    origin: origin,
+    peer: peer,
+    peerKey: peerKey,
+    body: body,
+    deviceTime: deviceTime,
+    simSlot: simSlot,
+    replyTo: replyTo,
+    code: code,
+    readAt: readAt ?? this.readAt,
+    backfill: backfill,
+  );
 }
 
 /// A thread with one number through one receiver phone.
 class Conversation {
   const Conversation({
     required this.deviceId,
+    this.cardNumber,
     required this.peer,
     required this.peerKey,
     required this.last,
@@ -107,15 +114,21 @@ class Conversation {
   });
 
   factory Conversation.fromJson(Map<String, Object?> j) => Conversation(
-        deviceId: _str(j['deviceId']) ?? '',
-        peer: _str(j['peer']) ?? '',
-        peerKey: _str(j['peerKey']) ?? '',
-        last: Message.fromJson((j['last'] as Map?)?.cast<String, Object?>() ?? const {}),
-        unread: _int(j['unread']) ?? 0,
-        replyable: j['replyable'] != false,
-      );
+    deviceId: _str(j['deviceId']) ?? '',
+    cardNumber: _str(j['cardNumber']),
+    peer: _str(j['peer']) ?? '',
+    peerKey: _str(j['peerKey']) ?? '',
+    last: Message.fromJson(
+      (j['last'] as Map?)?.cast<String, Object?>() ?? const {},
+    ),
+    unread: _int(j['unread']) ?? 0,
+    replyable: j['replyable'] != false,
+  );
 
   final String deviceId;
+
+  /// A SIM/card identity, when the server knows it. It remains stable if the SIM moves to another receiver phone.
+  final String? cardNumber;
   final String peer;
   final String peerKey;
   final Message last;
@@ -124,7 +137,8 @@ class Conversation {
   /// False for alphanumeric sender ids ("示例银行"), which cannot be replied to.
   final bool replyable;
 
-  String get key => '$deviceId|$peerKey';
+  String get key =>
+      '${cardNumber == null || cardNumber!.isEmpty ? 'device:$deviceId' : 'card:$cardNumber'}|$peerKey';
 }
 
 /// A receiver phone as clients see it (GET /api/v1/phones).
@@ -142,16 +156,21 @@ class Phone {
   });
 
   factory Phone.fromJson(Map<String, Object?> j) => Phone(
-        id: _str(j['id']) ?? '',
-        name: _str(j['name']) ?? '',
-        sims: [for (final s in (j['sims'] as List?) ?? const []) if (s is Map) Sim.fromJson(s.cast<String, Object?>())],
-        online: j['online'] == true,
-        revoked: j['revoked'] == true,
-        sendPolicy: SendPolicy.fromWire(_str(j['sendPolicy'])),
-        phoneSendPolicy: j['phoneSendPolicy'] == null ? null : SendPolicy.fromWire(_str(j['phoneSendPolicy'])),
-        effectivePolicy: SendPolicy.fromWire(_str(j['effectivePolicy'])),
-        battery: _int(j['battery']),
-      );
+    id: _str(j['id']) ?? '',
+    name: _str(j['name']) ?? '',
+    sims: [
+      for (final s in (j['sims'] as List?) ?? const [])
+        if (s is Map) Sim.fromJson(s.cast<String, Object?>()),
+    ],
+    online: j['online'] == true,
+    revoked: j['revoked'] == true,
+    sendPolicy: SendPolicy.fromWire(_str(j['sendPolicy'])),
+    phoneSendPolicy: j['phoneSendPolicy'] == null
+        ? null
+        : SendPolicy.fromWire(_str(j['phoneSendPolicy'])),
+    effectivePolicy: SendPolicy.fromWire(_str(j['effectivePolicy'])),
+    battery: _int(j['battery']),
+  );
 
   final String id;
   final String name;
@@ -171,11 +190,11 @@ class Phone {
     final need = reply ? SendPolicy.reply : SendPolicy.any;
     if (effectivePolicy.index >= need.index) return null;
     String label(SendPolicy? p) => switch (p) {
-          SendPolicy.off => '关闭',
-          SendPolicy.reply => '仅回复',
-          SendPolicy.any => '允许新发',
-          null => '手机尚未上报',
-        };
+      SendPolicy.off => '关闭',
+      SendPolicy.reply => '仅回复',
+      SendPolicy.any => '允许新发',
+      null => '手机尚未上报',
+    };
     return '下发策略不允许${reply ? '回复' : '新发'}（平台：${label(sendPolicy)}；手机：${label(phoneSendPolicy)}）';
   }
 }
@@ -188,7 +207,10 @@ enum TaskStatus {
   failed,
   expired;
 
-  static TaskStatus fromWire(String? v) => TaskStatus.values.firstWhere((s) => s.name == v, orElse: () => TaskStatus.queued);
+  static TaskStatus fromWire(String? v) => TaskStatus.values.firstWhere(
+    (s) => s.name == v,
+    orElse: () => TaskStatus.queued,
+  );
 
   bool get isFinal => this == delivered || this == failed || this == expired;
 }
@@ -210,18 +232,18 @@ class OutboundTask {
   });
 
   factory OutboundTask.fromJson(Map<String, Object?> j) => OutboundTask(
-        taskId: _str(j['taskId']) ?? '',
-        deviceId: _str(j['deviceId']) ?? '',
-        mode: _str(j['mode']) ?? 'reply',
-        recipient: _str(j['recipient']) ?? '',
-        recipientKey: _str(j['recipientKey']) ?? '',
-        body: _str(j['body']) ?? '',
-        status: TaskStatus.fromWire(_str(j['status'])),
-        createdAt: _int(j['createdAt']) ?? 0,
-        error: (_str(j['error']) ?? '').isEmpty ? null : _str(j['error']),
-        messageId: _int(j['messageId']),
-        simSlot: _int(j['simSlot']),
-      );
+    taskId: _str(j['taskId']) ?? '',
+    deviceId: _str(j['deviceId']) ?? '',
+    mode: _str(j['mode']) ?? 'reply',
+    recipient: _str(j['recipient']) ?? '',
+    recipientKey: _str(j['recipientKey']) ?? '',
+    body: _str(j['body']) ?? '',
+    status: TaskStatus.fromWire(_str(j['status'])),
+    createdAt: _int(j['createdAt']) ?? 0,
+    error: (_str(j['error']) ?? '').isEmpty ? null : _str(j['error']),
+    messageId: _int(j['messageId']),
+    simSlot: _int(j['simSlot']),
+  );
 
   final String taskId;
   final String deviceId;
@@ -247,7 +269,10 @@ class OutboundTask {
     };
     final base = labels[status]!;
     final reason = error == null ? null : (taskErrorLabels[error] ?? error);
-    return reason != null && (status == TaskStatus.failed || status == TaskStatus.expired) ? '$base：$reason' : base;
+    return reason != null &&
+            (status == TaskStatus.failed || status == TaskStatus.expired)
+        ? '$base：$reason'
+        : base;
   }
 }
 
@@ -267,16 +292,23 @@ const taskErrorLabels = {
 
 /// GET /api/v1/me
 class Me {
-  const Me({required this.deviceId, required this.kind, required this.name, required this.scopes, this.serverVersion, this.minClientVersion});
+  const Me({
+    required this.deviceId,
+    required this.kind,
+    required this.name,
+    required this.scopes,
+    this.serverVersion,
+    this.minClientVersion,
+  });
 
   factory Me.fromJson(Map<String, Object?> j) => Me(
-        deviceId: _str(j['deviceId']) ?? '',
-        kind: _str(j['kind']) ?? '',
-        name: _str(j['name']) ?? '',
-        scopes: Scopes.fromWire(j['scopes'] as List?),
-        serverVersion: _str(j['serverVersion']),
-        minClientVersion: _str(j['minClientVersion']),
-      );
+    deviceId: _str(j['deviceId']) ?? '',
+    kind: _str(j['kind']) ?? '',
+    name: _str(j['name']) ?? '',
+    scopes: Scopes.fromWire(j['scopes'] as List?),
+    serverVersion: _str(j['serverVersion']),
+    minClientVersion: _str(j['minClientVersion']),
+  );
 
   final String deviceId;
   final String kind;
@@ -290,18 +322,32 @@ class Me {
 sealed class ServerEvent {
   const ServerEvent();
 
-  static ServerEvent parse(String type, Map<String, Object?> data) => switch (type) {
-        'message' => MessageEvent(Message.fromJson(data), notify: data['notify'] == true),
-        'read' => ReadEvent([for (final i in (data['ids'] as List?) ?? const []) if (i is num) i.toInt()]),
-        'deleted' => DeletedEvent([for (final i in (data['ids'] as List?) ?? const []) if (i is num) i.toInt()]),
+  static ServerEvent parse(String type, Map<String, Object?> data) =>
+      switch (type) {
+        'message' => MessageEvent(
+          Message.fromJson(data),
+          notify: data['notify'] == true,
+        ),
+        'read' => ReadEvent([
+          for (final i in (data['ids'] as List?) ?? const [])
+            if (i is num) i.toInt(),
+        ]),
+        'deleted' => DeletedEvent([
+          for (final i in (data['ids'] as List?) ?? const [])
+            if (i is num) i.toInt(),
+        ]),
         'outbound' => OutboundEvent(
-            taskId: _str(data['taskId']) ?? '',
-            deviceId: _str(data['deviceId']) ?? '',
-            status: TaskStatus.fromWire(_str(data['status'])),
-            error: _str(data['error']),
-            messageId: _int(data['messageId']),
-          ),
-        'device' => DeviceEvent(deviceId: _str(data['deviceId']) ?? '', online: data['online'] == true, battery: _int(data['battery'])),
+          taskId: _str(data['taskId']) ?? '',
+          deviceId: _str(data['deviceId']) ?? '',
+          status: TaskStatus.fromWire(_str(data['status'])),
+          error: _str(data['error']),
+          messageId: _int(data['messageId']),
+        ),
+        'device' => DeviceEvent(
+          deviceId: _str(data['deviceId']) ?? '',
+          online: data['online'] == true,
+          battery: _int(data['battery']),
+        ),
         'resync' => const ResyncEvent(),
         _ => const UnknownEvent(),
       };
@@ -327,7 +373,13 @@ class DeletedEvent extends ServerEvent {
 }
 
 class OutboundEvent extends ServerEvent {
-  const OutboundEvent({required this.taskId, required this.deviceId, required this.status, this.error, this.messageId});
+  const OutboundEvent({
+    required this.taskId,
+    required this.deviceId,
+    required this.status,
+    this.error,
+    this.messageId,
+  });
   final String taskId;
   final String deviceId;
   final TaskStatus status;
@@ -336,7 +388,11 @@ class OutboundEvent extends ServerEvent {
 }
 
 class DeviceEvent extends ServerEvent {
-  const DeviceEvent({required this.deviceId, required this.online, this.battery});
+  const DeviceEvent({
+    required this.deviceId,
+    required this.online,
+    this.battery,
+  });
   final String deviceId;
   final bool online;
   final int? battery;

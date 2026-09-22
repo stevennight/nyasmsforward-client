@@ -83,9 +83,12 @@ class AppController extends ChangeNotifier {
   List<Message> thread = const [];
   bool selectingMessages = false;
   Set<int> selectedMessageIds = <int>{};
+  bool selectingConversations = false;
+  Map<String, Conversation> selectedConversations = <String, Conversation>{};
   List<OutboundTask> tasks = const [];
 
-  Scopes get scopes => Scopes({for (final s in settings.scopes) ?Scope.tryParse(s)});
+  Scopes get scopes =>
+      Scopes({for (final s in settings.scopes) ?Scope.tryParse(s)});
 
   /// The latest presence event per phone. Events are the freshest truth while the stream is live, so a list that was
   /// fetched while an event arrived must not overwrite it with an older answer.
@@ -96,7 +99,8 @@ class AppController extends ChangeNotifier {
   bool _disposed = false;
   bool _refreshing = false, _refreshAgain = false;
 
-  ApiClient _newApi(String baseUrl, String? token) => (apiFactory ?? (u, t) => ApiClient(baseUrl: u, token: t))(baseUrl, token);
+  ApiClient _newApi(String baseUrl, String? token) =>
+      (apiFactory ?? (u, t) => ApiClient(baseUrl: u, token: t))(baseUrl, token);
 
   // --- start / connect / sign out ----------------------------------------------------------------------------
 
@@ -122,12 +126,27 @@ class AppController extends ChangeNotifier {
     final client = _newApi(request.serverUrl, null);
     try {
       final result = request.mode == ConnectMode.pairingCode
-          ? await client.claim(code: request.pairingCode!, name: request.deviceName, platform: platform, appVersion: appVersion)
+          ? await client.claim(
+              code: request.pairingCode!,
+              name: request.deviceName,
+              platform: platform,
+              appVersion: appVersion,
+            )
           : await client.loginDevice(
-              password: request.password!, name: request.deviceName, platform: platform, appVersion: appVersion, totp: request.totp);
+              password: request.password!,
+              name: request.deviceName,
+              platform: platform,
+              appVersion: appVersion,
+              totp: request.totp,
+            );
       if (result.token.isEmpty) return '服务器返回的内容无法识别，请检查地址';
       await tokens.write(result.token);
-      settings = settings.copyWith(serverUrl: request.serverUrl, deviceName: request.deviceName, deviceId: result.deviceId, scopes: result.scopes);
+      settings = settings.copyWith(
+        serverUrl: request.serverUrl,
+        deviceName: request.deviceName,
+        deviceId: result.deviceId,
+        scopes: result.scopes,
+      );
       await settingsStore.save(settings);
       _api = _newApi(request.serverUrl, result.token);
       banner = null;
@@ -173,7 +192,13 @@ class AppController extends ChangeNotifier {
     try {
       final who = await api.me();
       me = who;
-      settings = settings.copyWith(deviceId: who.deviceId, scopes: {for (final s in ['read', 'reply', 'send', 'delete']) if (_has(who.scopes, s)) s});
+      settings = settings.copyWith(
+        deviceId: who.deviceId,
+        scopes: {
+          for (final s in ['read', 'reply', 'send', 'delete'])
+            if (_has(who.scopes, s)) s,
+        },
+      );
       await settingsStore.save(settings);
       banner = null;
     } on ApiException catch (e) {
@@ -193,12 +218,12 @@ class AppController extends ChangeNotifier {
   }
 
   bool _has(Scopes s, String name) => switch (name) {
-        'read' => s.canRead,
-        'reply' => s.canReply,
-        'send' => s.canSend,
-        'delete' => s.canDelete,
-        _ => false,
-      };
+    'read' => s.canRead,
+    'reply' => s.canReply,
+    'send' => s.canSend,
+    'delete' => s.canDelete,
+    _ => false,
+  };
 
   void _startStream() {
     final api = _api;
@@ -272,8 +297,13 @@ class AppController extends ChangeNotifier {
       final open = selected;
       if (open != null) {
         final still = conversations.where((c) => c.key == open.key);
-        selected = still.isEmpty ? open : still.first;
-        await _loadThread();
+        selected = still.isEmpty ? null : still.first;
+        if (selected == null) {
+          thread = const [];
+          tasks = const [];
+        } else {
+          await _loadThread();
+        }
       }
       if (banner != null && link == LinkState.live) banner = null;
     } on ApiException catch (e) {
@@ -294,11 +324,30 @@ class AppController extends ChangeNotifier {
   Future<void> _loadThread() async {
     final api = _api, open = selected;
     if (api == null || open == null) return;
-    thread = await api.thread(open.deviceId, open.peerKey);
-    tasks = scopes.canRead ? await api.outbound(deviceId: open.deviceId, peer: open.peerKey, limit: 3) : const [];
+    thread = await api.thread(
+      open.deviceId,
+      open.peerKey,
+      cardNumber: open.cardNumber,
+    );
+    tasks = scopes.canRead
+        ? await api.outbound(
+            deviceId: open.deviceId,
+            peer: open.peerKey,
+            limit: 3,
+          )
+        : const [];
     if (thread.any((m) => m.isUnread)) {
-      await api.markThreadRead(open.deviceId, open.peer);
-      thread = [for (final m in thread) m.isUnread ? m.copyWith(readAt: DateTime.now().millisecondsSinceEpoch) : m];
+      await api.markThreadRead(
+        open.deviceId,
+        open.peer,
+        cardNumber: open.cardNumber,
+      );
+      thread = [
+        for (final m in thread)
+          m.isUnread
+              ? m.copyWith(readAt: DateTime.now().millisecondsSinceEpoch)
+              : m,
+      ];
       final list = await api.conversations();
       conversations = list.items;
       unread = list.unread;
@@ -339,22 +388,22 @@ class AppController extends ChangeNotifier {
   }
 
   List<Phone> _withPresence(List<Phone> list) => [
-        for (final p in list)
-          if (_presence[p.id] case final DeviceEvent ev?)
-            Phone(
-              id: p.id,
-              name: p.name,
-              sims: p.sims,
-              online: ev.online,
-              revoked: p.revoked,
-              sendPolicy: p.sendPolicy,
-              phoneSendPolicy: p.phoneSendPolicy,
-              effectivePolicy: p.effectivePolicy,
-              battery: ev.battery ?? p.battery,
-            )
-          else
-            p,
-      ];
+    for (final p in list)
+      if (_presence[p.id] case final DeviceEvent ev?)
+        Phone(
+          id: p.id,
+          name: p.name,
+          sims: p.sims,
+          online: ev.online,
+          revoked: p.revoked,
+          sendPolicy: p.sendPolicy,
+          phoneSendPolicy: p.phoneSendPolicy,
+          effectivePolicy: p.effectivePolicy,
+          battery: ev.battery ?? p.battery,
+        )
+      else
+        p,
+  ];
 
   // --- sending -------------------------------------------------------------------------------------------------
 
@@ -415,11 +464,21 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<String?> sendNew({required String deviceId, int? simSlot, required String to, required String body}) async {
+  Future<String?> sendNew({
+    required String deviceId,
+    int? simSlot,
+    required String to,
+    required String body,
+  }) async {
     final api = _api;
     if (api == null) return '还没有连接';
     try {
-      await api.sendNew(deviceId: deviceId, simSlot: simSlot, to: to, body: body);
+      await api.sendNew(
+        deviceId: deviceId,
+        simSlot: simSlot,
+        to: to,
+        body: body,
+      );
       await _refreshTasks();
       return null;
     } on ApiException catch (e) {
@@ -442,7 +501,11 @@ class AppController extends ChangeNotifier {
     final api = _api, open = selected;
     if (api == null || open == null) return;
     try {
-      tasks = await api.outbound(deviceId: open.deviceId, peer: open.peerKey, limit: 3);
+      tasks = await api.outbound(
+        deviceId: open.deviceId,
+        peer: open.peerKey,
+        limit: 3,
+      );
     } on ApiException {
       // The list is only a convenience; the send itself already succeeded.
     }
@@ -454,7 +517,7 @@ class AppController extends ChangeNotifier {
     if (api == null) return;
     for (final c in conversations.where((c) => c.unread > 0)) {
       try {
-        await api.markThreadRead(c.deviceId, c.peer);
+        await api.markThreadRead(c.deviceId, c.peer, cardNumber: c.cardNumber);
       } on ApiException {
         break;
       }
@@ -489,14 +552,16 @@ class AppController extends ChangeNotifier {
   /// address. It is only saved when the server there recognises this very device, so a typo cannot lock the client out.
   Future<String?> changeServerUrl(String raw) async {
     final checked = ServerUrl.validate(raw);
-    if (checked is ServerUrlInvalid) return serverUrlProblemText(checked.problem);
+    if (checked is ServerUrlInvalid)
+      return serverUrlProblemText(checked.problem);
     final url = (checked as ServerUrlOk).url;
     final token = await tokens.read();
     if (token == null) return '还没有连接';
     final probe = _newApi(url, token);
     try {
       final who = await probe.me();
-      if (who.deviceId != settings.deviceId) return '那个地址上的服务器不认识这个客户端（设备不一致），没有保存。换服务器请重新连接';
+      if (who.deviceId != settings.deviceId)
+        return '那个地址上的服务器不认识这个客户端（设备不一致），没有保存。换服务器请重新连接';
       settings = settings.copyWith(serverUrl: url);
       await settingsStore.save(settings);
       await _stopLive();
@@ -529,6 +594,31 @@ class AppController extends ChangeNotifier {
   void setMessageSelection(bool enabled) {
     selectingMessages = enabled;
     if (!enabled) selectedMessageIds = <int>{};
+    if (enabled) {
+      selectingConversations = false;
+      selectedConversations = <String, Conversation>{};
+    }
+    notifyListeners();
+  }
+
+  void setConversationSelection(bool enabled) {
+    selectingConversations = enabled;
+    if (!enabled) selectedConversations = <String, Conversation>{};
+    if (enabled) {
+      selectingMessages = false;
+      selectedMessageIds = <int>{};
+    }
+    notifyListeners();
+  }
+
+  void toggleConversationSelection(Conversation conversation) {
+    final next = {...selectedConversations};
+    if (next.containsKey(conversation.key)) {
+      next.remove(conversation.key);
+    } else {
+      next[conversation.key] = conversation;
+    }
+    selectedConversations = next;
     notifyListeners();
   }
 
@@ -542,7 +632,10 @@ class AppController extends ChangeNotifier {
   void selectCurrentThread() {
     final ids = thread.map((m) => m.id).toSet();
     final next = {...selectedMessageIds};
-    if (ids.every(next.contains)) next.removeAll(ids); else next.addAll(ids);
+    if (ids.every(next.contains))
+      next.removeAll(ids);
+    else
+      next.addAll(ids);
     selectedMessageIds = next;
     notifyListeners();
   }
@@ -555,6 +648,24 @@ class AppController extends ChangeNotifier {
       await api.deleteMessages(selectedMessageIds.toList());
       selectingMessages = false;
       selectedMessageIds = <int>{};
+      await refreshAll();
+      return null;
+    } on ApiException catch (e) {
+      return e.text;
+    }
+  }
+
+  Future<String?> deleteSelectedConversations() async {
+    if (!scopes.canDelete) return '这个客户端没有“删除”权限，可以在 Web 的设备页调整';
+    final api = _api;
+    if (api == null || selectedConversations.isEmpty) return null;
+    try {
+      await api.deleteConversations(selectedConversations.values.toList());
+      selectingConversations = false;
+      selectedConversations = <String, Conversation>{};
+      selected = null;
+      thread = const [];
+      tasks = const [];
       await refreshAll();
       return null;
     } on ApiException catch (e) {
@@ -614,4 +725,3 @@ class AppController extends ChangeNotifier {
     super.dispose();
   }
 }
-

@@ -33,14 +33,23 @@ class HomeScreen extends StatelessWidget {
           },
           child: Scaffold(
             appBar: AppBar(
-              leading: showThreadOnly ? BackButton(onPressed: () => controller.openConversation(null)) : null,
+              leading: showThreadOnly
+                  ? BackButton(
+                      onPressed: () => controller.openConversation(null),
+                    )
+                  : null,
               title: Text(showThreadOnly ? selected.peer : 'NyaSmsForward'),
               actions: [
                 Center(child: LinkIndicator(link: controller.link)),
                 if (controller.unread > 0)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Center(child: Badge.count(count: controller.unread, key: const Key('unreadBadge'))),
+                    child: Center(
+                      child: Badge.count(
+                        count: controller.unread,
+                        key: const Key('unreadBadge'),
+                      ),
+                    ),
                   ),
                 IconButton(
                   key: const Key('newMessage'),
@@ -48,55 +57,110 @@ class HomeScreen extends StatelessWidget {
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: controller.phones.isEmpty
                       ? null
-                      : () => showDialog<void>(context: context, builder: (_) => NewMessageDialog(controller: controller, initialDevice: selected?.deviceId)),
+                      : () => showDialog<void>(
+                          context: context,
+                          builder: (_) => NewMessageDialog(
+                            controller: controller,
+                            initialDevice: selected?.deviceId,
+                          ),
+                        ),
                 ),
                 IconButton(
                   tooltip: '全部已读',
                   icon: const Icon(Icons.done_all),
-                  onPressed: controller.unread > 0 ? controller.markAllRead : null,
+                  onPressed: controller.unread > 0
+                      ? controller.markAllRead
+                      : null,
                 ),
-                if (selected != null && controller.scopes.canDelete)
+                if (controller.scopes.canDelete && (wide || !showThreadOnly))
+                  IconButton(
+                    key: const Key('toggleConversationSelection'),
+                    tooltip: controller.selectingConversations
+                        ? '退出会话选择'
+                        : '选择会话',
+                    icon: Icon(
+                      controller.selectingConversations
+                          ? Icons.close
+                          : Icons.playlist_add_check,
+                    ),
+                    onPressed: () => controller.setConversationSelection(
+                      !controller.selectingConversations,
+                    ),
+                  ),
+                if (selected != null &&
+                    controller.scopes.canDelete &&
+                    !controller.selectingConversations)
                   IconButton(
                     key: const Key('toggleMessageSelection'),
                     tooltip: controller.selectingMessages ? '退出多选' : '多选删除',
-                    icon: Icon(controller.selectingMessages ? Icons.close : Icons.checklist),
-                    onPressed: () => controller.setMessageSelection(!controller.selectingMessages),
+                    icon: Icon(
+                      controller.selectingMessages
+                          ? Icons.close
+                          : Icons.checklist,
+                    ),
+                    onPressed: () => controller.setMessageSelection(
+                      !controller.selectingMessages,
+                    ),
                   ),
                 if (controller.scopes.canDelete)
                   IconButton(
                     key: const Key('openRecycleBin'),
                     tooltip: '回收站',
                     icon: const Icon(Icons.restore_from_trash_outlined),
-                    onPressed: () => showDialog<void>(context: context, builder: (_) => RecycleBinDialog(controller: controller)),
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => RecycleBinDialog(controller: controller),
+                    ),
                   ),
-                if (controller.selectingMessages && controller.selectedMessageIds.isNotEmpty)
+                if (controller.selectingMessages &&
+                    controller.selectedMessageIds.isNotEmpty)
                   IconButton(
                     key: const Key('deleteSelectedMessages'),
                     tooltip: '删除选中 ${controller.selectedMessageIds.length} 条',
                     icon: const Icon(Icons.delete_outline),
                     onPressed: () => _confirmDelete(context, controller),
                   ),
+                if (controller.selectingConversations &&
+                    controller.selectedConversations.isNotEmpty)
+                  IconButton(
+                    key: const Key('deleteSelectedConversations'),
+                    tooltip:
+                        '删除选中 ${controller.selectedConversations.length} 个会话',
+                    icon: const Icon(Icons.delete_sweep_outlined),
+                    onPressed: () =>
+                        _confirmConversationDelete(context, controller),
+                  ),
                 IconButton(
                   key: const Key('openSettings'),
                   tooltip: '设置',
                   icon: const Icon(Icons.settings_outlined),
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SettingsScreen(controller: controller))),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => SettingsScreen(controller: controller),
+                    ),
+                  ),
                 ),
               ],
             ),
             body: Column(
               children: [
-                if (controller.banner != null) BannerStrip(text: controller.banner!),
+                if (controller.banner != null)
+                  BannerStrip(text: controller.banner!),
                 Expanded(
                   child: wide
                       ? Row(
                           children: [
-                            SizedBox(width: 360, child: ConversationList(controller: controller)),
+                            SizedBox(
+                              width: 360,
+                              child: ConversationList(controller: controller),
+                            ),
                             const VerticalDivider(width: 1),
                             Expanded(child: ThreadView(controller: controller)),
                           ],
                         )
-                      : (showThreadOnly ? ThreadView(controller: controller) : ConversationList(controller: controller)),
+                      : (showThreadOnly
+                            ? ThreadView(controller: controller)
+                            : ConversationList(controller: controller)),
                 ),
               ],
             ),
@@ -118,7 +182,8 @@ class RecycleBinDialog extends StatefulWidget {
 class _RecycleBinDialogState extends State<RecycleBinDialog> {
   late Future<List<Message>> _items = widget.controller.deletedMessages();
 
-  void _reload() => setState(() => _items = widget.controller.deletedMessages());
+  void _reload() =>
+      setState(() => _items = widget.controller.deletedMessages());
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -128,7 +193,8 @@ class _RecycleBinDialogState extends State<RecycleBinDialog> {
       child: FutureBuilder<List<Message>>(
         future: _items,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (snapshot.connectionState != ConnectionState.done)
+            return const Center(child: CircularProgressIndicator());
           final items = snapshot.data ?? const <Message>[];
           if (items.isEmpty) return const Text('回收站为空。删除的短信保留 30 天。');
           return ListView.builder(
@@ -138,12 +204,20 @@ class _RecycleBinDialogState extends State<RecycleBinDialog> {
               final m = items[i];
               return ListTile(
                 title: Text(m.peer),
-                subtitle: Text(m.body, maxLines: 2, overflow: TextOverflow.ellipsis),
+                subtitle: Text(
+                  m.body,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 trailing: TextButton(
                   onPressed: () async {
                     final error = await widget.controller.restoreMessage(m.id);
                     if (!mounted) return;
-                    if (error != null) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error))); else _reload();
+                    if (error != null)
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text(error)));
+                    else
+                      _reload();
                   },
                   child: const Text('恢复'),
                 ),
@@ -153,11 +227,19 @@ class _RecycleBinDialogState extends State<RecycleBinDialog> {
         },
       ),
     ),
-    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('关闭'),
+      ),
+    ],
   );
 }
 
-Future<void> _confirmDelete(BuildContext context, AppController controller) async {
+Future<void> _confirmDelete(
+  BuildContext context,
+  AppController controller,
+) async {
   final count = controller.selectedMessageIds.length;
   final okay = await showDialog<bool>(
     context: context,
@@ -165,14 +247,49 @@ Future<void> _confirmDelete(BuildContext context, AppController controller) asyn
       title: const Text('移到回收站？'),
       content: Text('选中的 $count 条短信将保留在回收站 30 天，之后永久删除。'),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除')),
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('删除'),
+        ),
       ],
     ),
   );
   if (okay != true || !context.mounted) return;
   final error = await controller.deleteSelectedMessages();
-  if (error != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  if (error != null && context.mounted)
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+}
+
+Future<void> _confirmConversationDelete(
+  BuildContext context,
+  AppController controller,
+) async {
+  final count = controller.selectedConversations.length;
+  final okay = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('移除完整会话？'),
+      content: Text('选中的 $count 个号码会话及其全部短信将保留在回收站 30 天，之后永久删除。'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('删除'),
+        ),
+      ],
+    ),
+  );
+  if (okay != true || !context.mounted) return;
+  final error = await controller.deleteSelectedConversations();
+  if (error != null && context.mounted)
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
 }
 
 class BannerStrip extends StatelessWidget {
@@ -188,7 +305,10 @@ class BannerStrip extends StatelessWidget {
       width: double.infinity,
       color: theme.colorScheme.errorContainer,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Text(text, style: TextStyle(color: theme.colorScheme.onErrorContainer)),
+      child: Text(
+        text,
+        style: TextStyle(color: theme.colorScheme.onErrorContainer),
+      ),
     );
   }
 }
@@ -241,7 +361,9 @@ class _ConversationListState extends State<ConversationList> {
   bool _matches(Conversation c) {
     final q = _search.text.trim().toLowerCase();
     if (_unreadOnly && c.unread == 0) return false;
-    return q.isEmpty || c.peer.toLowerCase().contains(q) || c.last.body.toLowerCase().contains(q);
+    return q.isEmpty ||
+        c.peer.toLowerCase().contains(q) ||
+        c.last.body.toLowerCase().contains(q);
   }
 
   @override
@@ -260,12 +382,19 @@ class _ConversationListState extends State<ConversationList> {
                 child: TextField(
                   key: const Key('search'),
                   controller: _search,
-                  decoration: const InputDecoration(hintText: '搜索号码 / 内容', prefixIcon: Icon(Icons.search, size: 18)),
+                  decoration: const InputDecoration(
+                    hintText: '搜索号码 / 内容',
+                    prefixIcon: Icon(Icons.search, size: 18),
+                  ),
                   onChanged: (_) => setState(() {}),
                 ),
               ),
               const SizedBox(width: 8),
-              FilterChip(label: const Text('未读'), selected: _unreadOnly, onSelected: (v) => setState(() => _unreadOnly = v)),
+              FilterChip(
+                label: const Text('未读'),
+                selected: _unreadOnly,
+                onSelected: (v) => setState(() => _unreadOnly = v),
+              ),
             ],
           ),
         ),
@@ -275,10 +404,14 @@ class _ConversationListState extends State<ConversationList> {
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(
-                      controller.conversations.isEmpty ? '还没有收到短信。先在 Web 里配对一台接收端手机。' : '没有匹配的会话',
+                      controller.conversations.isEmpty
+                          ? '还没有收到短信。先在 Web 里配对一台接收端手机。'
+                          : '没有匹配的会话',
                       key: const Key('emptyList'),
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 )
@@ -290,7 +423,14 @@ class _ConversationListState extends State<ConversationList> {
                     conversation: items[i],
                     phoneName: controller.phoneFor(items[i].deviceId)?.name,
                     selected: controller.selected?.key == items[i].key,
-                    onTap: () => controller.openConversation(items[i]),
+                    selecting: controller.selectingConversations,
+                    deleteSelected: controller.selectedConversations
+                        .containsKey(items[i].key),
+                    onTap: () => controller.selectingConversations
+                        ? controller.toggleConversationSelection(items[i])
+                        : controller.openConversation(items[i]),
+                    onToggle: () =>
+                        controller.toggleConversationSelection(items[i]),
                   ),
                 ),
         ),
@@ -300,11 +440,23 @@ class _ConversationListState extends State<ConversationList> {
 }
 
 class ConversationTile extends StatelessWidget {
-  const ConversationTile({super.key, required this.conversation, required this.selected, required this.onTap, this.phoneName});
+  const ConversationTile({
+    super.key,
+    required this.conversation,
+    required this.selected,
+    required this.selecting,
+    required this.deleteSelected,
+    required this.onTap,
+    required this.onToggle,
+    this.phoneName,
+  });
 
   final Conversation conversation;
   final bool selected;
+  final bool selecting;
+  final bool deleteSelected;
   final VoidCallback onTap;
+  final VoidCallback onToggle;
   final String? phoneName;
 
   @override
@@ -313,15 +465,32 @@ class ConversationTile extends StatelessWidget {
     final c = conversation;
     final last = c.last;
     return ListTile(
-      selected: selected,
+      selected: selected || (selecting && deleteSelected),
       onTap: onTap,
+      leading: selecting
+          ? Checkbox(value: deleteSelected, onChanged: (_) => onToggle())
+          : null,
       title: Row(
         children: [
           if (!last.isIncoming) Text('发出 ', style: theme.textTheme.labelSmall),
-          Flexible(child: Text(c.peer, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: c.unread > 0 ? FontWeight.bold : FontWeight.w500))),
+          Flexible(
+            child: Text(
+              c.peer,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: c.unread > 0 ? FontWeight.bold : FontWeight.w500,
+              ),
+            ),
+          ),
           if (last.code != null && last.code!.isNotEmpty) ...[
             const SizedBox(width: 6),
-            Text(last.code!, style: theme.textTheme.labelMedium?.copyWith(fontFamily: 'monospace', color: theme.colorScheme.primary)),
+            Text(
+              last.code!,
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontFamily: 'monospace',
+                color: theme.colorScheme.primary,
+              ),
+            ),
           ],
         ],
       ),
@@ -332,7 +501,13 @@ class ConversationTile extends StatelessWidget {
         children: [
           Text(clock(last.deviceTime), style: theme.textTheme.labelSmall),
           const SizedBox(height: 2),
-          if (c.unread > 0) Badge.count(count: c.unread) else Text(phoneName?.split(' · ').first ?? '', style: theme.textTheme.labelSmall),
+          if (c.unread > 0)
+            Badge.count(count: c.unread)
+          else
+            Text(
+              phoneName?.split(' · ').first ?? '',
+              style: theme.textTheme.labelSmall,
+            ),
         ],
       ),
     );

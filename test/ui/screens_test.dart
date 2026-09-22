@@ -284,6 +284,46 @@ void main() {
       expect(find.text('没有匹配的会话'), findsOneWidget);
     });
 
+    testWidgets('selects multiple complete number conversations for deletion', (
+      tester,
+    ) async {
+      final rig = Rig(
+        scopes: const ['read', 'reply', 'send', 'delete'],
+        extraConversations: [
+          convJson(msgJson(9, peer: '13800000000', body: '你到家了吗？')),
+        ],
+      );
+      rig.server.routes['POST /api/v1/messages/delete-conversations'] = (_) => {
+        'deleted': 2,
+      };
+      await rig.pump(tester);
+
+      await tester.tap(find.byTooltip('选择会话'));
+      await tester.pump();
+      expect(find.byType(Checkbox), findsNWidgets(2));
+      await tester.tap(find.byType(ConversationTile).first);
+      await tester.tap(find.byType(ConversationTile).at(1));
+      await tester.pump();
+      await tester.tap(byKey('deleteSelectedConversations'));
+      await tester.pumpAndSettle();
+      expect(find.text('移除完整会话？'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, '删除'));
+      await tester.pumpAndSettle();
+
+      expect(
+        rig.server
+            .called('POST', '/api/v1/messages/delete-conversations')
+            .single
+            .body,
+        {
+          'conversations': [
+            {'peerKey': '106901234', 'deviceId': 'd1'},
+            {'peerKey': '13800000000', 'deviceId': 'd1'},
+          ],
+        },
+      );
+    });
+
     testWidgets(
       'connection trouble is shown above the list, and the live indicator says so',
       (tester) async {
@@ -551,14 +591,19 @@ void main() {
       },
     );
 
-    testWidgets('Android can opt into foreground notifications', (tester) async {
+    testWidgets('Android can opt into foreground notifications', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       try {
         final rig = Rig();
         await rig.pump(tester);
         await openSettings(tester);
         await tester.ensureVisible(byKey('foregroundNotifySwitch'));
-        expect(tester.widget<SwitchListTile>(byKey('foregroundNotifySwitch')).value, isFalse);
+        expect(
+          tester.widget<SwitchListTile>(byKey('foregroundNotifySwitch')).value,
+          isFalse,
+        );
         await tester.tap(byKey('foregroundNotifySwitch'));
         await tester.pumpAndSettle();
         expect(rig.store.value.foregroundNotifications, isTrue);
