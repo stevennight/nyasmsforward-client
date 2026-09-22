@@ -40,6 +40,12 @@ class ThreadView extends StatelessWidget {
                   ],
                 ),
               ),
+              if (controller.selectingMessages && messages.isNotEmpty)
+                TextButton(
+                  key: const Key('selectThreadMessages'),
+                  onPressed: controller.selectCurrentThread,
+                  child: Text(messages.every((m) => controller.selectedMessageIds.contains(m.id)) ? '取消全选' : '全选'),
+                ),
             ],
           ),
         ),
@@ -50,7 +56,7 @@ class ThreadView extends StatelessWidget {
             reverse: true,
             padding: const EdgeInsets.all(12),
             itemCount: messages.length,
-            itemBuilder: (context, i) => Bubble(message: messages[messages.length - 1 - i]),
+            itemBuilder: (context, i) => Bubble(message: messages[messages.length - 1 - i], controller: controller),
           ),
         ),
         ReplyBox(controller: controller),
@@ -104,9 +110,10 @@ class _CodeCardState extends State<CodeCard> {
 }
 
 class Bubble extends StatelessWidget {
-  const Bubble({super.key, required this.message});
+  const Bubble({super.key, required this.message, required this.controller});
 
   final Message message;
+  final AppController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -130,9 +137,35 @@ class Bubble extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              SelectableText(message.body),
+              if (controller.selectingMessages)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Checkbox(
+                      key: Key('selectMessage_${message.id}'),
+                      value: controller.selectedMessageIds.contains(message.id),
+                      onChanged: (_) => controller.toggleMessageSelection(message.id),
+                    ),
+                    Flexible(child: SelectableText(message.body)),
+                  ],
+                )
+              else
+                SelectableText(message.body),
               const SizedBox(height: 2),
-              Text('${clock(message.deviceTime)}$via$sim', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('${clock(message.deviceTime)}$via$sim', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  if (!controller.selectingMessages && controller.scopes.canDelete)
+                    IconButton(
+                      tooltip: '删除这条短信',
+                      visualDensity: VisualDensity.compact,
+                      iconSize: 16,
+                      onPressed: () { controller.toggleMessageSelection(message.id); controller.setMessageSelection(true); },
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                ],
+              ),
             ],
           ),
         ),

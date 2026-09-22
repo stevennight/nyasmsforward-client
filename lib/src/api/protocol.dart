@@ -25,11 +25,12 @@ enum SendPolicy {
   static SendPolicy stricter(SendPolicy a, SendPolicy b) => a.index <= b.index ? a : b;
 }
 
-/// What a client token may do (docs/协议.md §3): `read`, `reply`, `send`.
+/// What a client token may do (docs/协议.md §3): `read`, `reply`, `send`, `delete`.
 enum Scope {
   read,
   reply,
-  send;
+  send,
+  delete;
 
   static Scope? tryParse(String? value) {
     for (final s in Scope.values) {
@@ -51,6 +52,7 @@ class Scopes {
   bool get canRead => granted.contains(Scope.read);
   bool get canReply => granted.contains(Scope.reply);
   bool get canSend => granted.contains(Scope.send);
+  bool get canDelete => granted.contains(Scope.delete);
 }
 
 /// Error codes of the `{"error": "<code>"}` body. Clients key off the code, never off the message.

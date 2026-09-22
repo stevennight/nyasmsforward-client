@@ -195,6 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (c.scopes.canRead) '查看',
       if (c.scopes.canReply) '回复',
       if (c.scopes.canSend) '新发',
+      if (c.scopes.canDelete) '删除',
     ];
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),

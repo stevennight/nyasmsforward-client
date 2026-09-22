@@ -55,6 +55,27 @@ class HomeScreen extends StatelessWidget {
                   icon: const Icon(Icons.done_all),
                   onPressed: controller.unread > 0 ? controller.markAllRead : null,
                 ),
+                if (selected != null && controller.scopes.canDelete)
+                  IconButton(
+                    key: const Key('toggleMessageSelection'),
+                    tooltip: controller.selectingMessages ? '退出多选' : '多选删除',
+                    icon: Icon(controller.selectingMessages ? Icons.close : Icons.checklist),
+                    onPressed: () => controller.setMessageSelection(!controller.selectingMessages),
+                  ),
+                if (controller.scopes.canDelete)
+                  IconButton(
+                    key: const Key('openRecycleBin'),
+                    tooltip: '回收站',
+                    icon: const Icon(Icons.restore_from_trash_outlined),
+                    onPressed: () => showDialog<void>(context: context, builder: (_) => RecycleBinDialog(controller: controller)),
+                  ),
+                if (controller.selectingMessages && controller.selectedMessageIds.isNotEmpty)
+                  IconButton(
+                    key: const Key('deleteSelectedMessages'),
+                    tooltip: '删除选中 ${controller.selectedMessageIds.length} 条',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _confirmDelete(context, controller),
+                  ),
                 IconButton(
                   key: const Key('openSettings'),
                   tooltip: '设置',
@@ -84,6 +105,74 @@ class HomeScreen extends StatelessWidget {
       },
     );
   }
+}
+
+class RecycleBinDialog extends StatefulWidget {
+  const RecycleBinDialog({super.key, required this.controller});
+  final AppController controller;
+
+  @override
+  State<RecycleBinDialog> createState() => _RecycleBinDialogState();
+}
+
+class _RecycleBinDialogState extends State<RecycleBinDialog> {
+  late Future<List<Message>> _items = widget.controller.deletedMessages();
+
+  void _reload() => setState(() => _items = widget.controller.deletedMessages());
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('回收站'),
+    content: SizedBox(
+      width: 460,
+      child: FutureBuilder<List<Message>>(
+        future: _items,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          final items = snapshot.data ?? const <Message>[];
+          if (items.isEmpty) return const Text('回收站为空。删除的短信保留 30 天。');
+          return ListView.builder(
+            shrinkWrap: true,
+            itemCount: items.length,
+            itemBuilder: (context, i) {
+              final m = items[i];
+              return ListTile(
+                title: Text(m.peer),
+                subtitle: Text(m.body, maxLines: 2, overflow: TextOverflow.ellipsis),
+                trailing: TextButton(
+                  onPressed: () async {
+                    final error = await widget.controller.restoreMessage(m.id);
+                    if (!mounted) return;
+                    if (error != null) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error))); else _reload();
+                  },
+                  child: const Text('恢复'),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    ),
+    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
+  );
+}
+
+Future<void> _confirmDelete(BuildContext context, AppController controller) async {
+  final count = controller.selectedMessageIds.length;
+  final okay = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('移到回收站？'),
+      content: Text('选中的 $count 条短信将保留在回收站 30 天，之后永久删除。'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除')),
+      ],
+    ),
+  );
+  if (okay != true || !context.mounted) return;
+  final error = await controller.deleteSelectedMessages();
+  if (error != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
 }
 
 class BannerStrip extends StatelessWidget {

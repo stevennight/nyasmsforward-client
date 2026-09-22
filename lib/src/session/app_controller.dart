@@ -1,5 +1,5 @@
 /// The state of a connected client: who we are, the conversations, the phones, the live stream, and everything the user
-/// can do (read, reply, send). UI-agnostic apart from [ChangeNotifier]; the screens only watch and call it.
+/// can do (read, reply, send, delete). UI-agnostic apart from [ChangeNotifier]; the screens only watch and call it.
 library;
 
 import 'dart:async';
@@ -81,6 +81,8 @@ class AppController extends ChangeNotifier {
 
   Conversation? selected;
   List<Message> thread = const [];
+  bool selectingMessages = false;
+  Set<int> selectedMessageIds = <int>{};
   List<OutboundTask> tasks = const [];
 
   Scopes get scopes => Scopes({for (final s in settings.scopes) ?Scope.tryParse(s)});
@@ -171,7 +173,7 @@ class AppController extends ChangeNotifier {
     try {
       final who = await api.me();
       me = who;
-      settings = settings.copyWith(deviceId: who.deviceId, scopes: {for (final s in ['read', 'reply', 'send']) if (_has(who.scopes, s)) s});
+      settings = settings.copyWith(deviceId: who.deviceId, scopes: {for (final s in ['read', 'reply', 'send', 'delete']) if (_has(who.scopes, s)) s});
       await settingsStore.save(settings);
       banner = null;
     } on ApiException catch (e) {
@@ -193,7 +195,9 @@ class AppController extends ChangeNotifier {
   bool _has(Scopes s, String name) => switch (name) {
         'read' => s.canRead,
         'reply' => s.canReply,
-        _ => s.canSend,
+        'send' => s.canSend,
+        'delete' => s.canDelete,
+        _ => false,
       };
 
   void _startStream() {
@@ -520,6 +524,66 @@ class AppController extends ChangeNotifier {
 
   void setAppVisible(bool visible) {
     _appVisible = visible;
+  }
+
+  void setMessageSelection(bool enabled) {
+    selectingMessages = enabled;
+    if (!enabled) selectedMessageIds = <int>{};
+    notifyListeners();
+  }
+
+  void toggleMessageSelection(int id) {
+    final next = {...selectedMessageIds};
+    if (!next.add(id)) next.remove(id);
+    selectedMessageIds = next;
+    notifyListeners();
+  }
+
+  void selectCurrentThread() {
+    final ids = thread.map((m) => m.id).toSet();
+    final next = {...selectedMessageIds};
+    if (ids.every(next.contains)) next.removeAll(ids); else next.addAll(ids);
+    selectedMessageIds = next;
+    notifyListeners();
+  }
+
+  Future<String?> deleteSelectedMessages() async {
+    if (!scopes.canDelete) return '这个客户端没有“删除”权限，可以在 Web 的设备页调整';
+    final api = _api;
+    if (api == null || selectedMessageIds.isEmpty) return null;
+    try {
+      await api.deleteMessages(selectedMessageIds.toList());
+      selectingMessages = false;
+      selectedMessageIds = <int>{};
+      await refreshAll();
+      return null;
+    } on ApiException catch (e) {
+      return e.text;
+    }
+  }
+
+  Future<List<Message>> deletedMessages() async {
+    final api = _api;
+    if (api == null || !scopes.canDelete) return const [];
+    try {
+      return await api.deletedMessages();
+    } on ApiException catch (e) {
+      banner = e.text;
+      notifyListeners();
+      return const [];
+    }
+  }
+
+  Future<String?> restoreMessage(int id) async {
+    final api = _api;
+    if (api == null || !scopes.canDelete) return '这个客户端没有“删除”权限';
+    try {
+      await api.restoreMessage(id);
+      await refreshAll();
+      return null;
+    } on ApiException catch (e) {
+      return e.text;
+    }
   }
 
   /// Android: while the app is in the background a foreground service holds the connection and shows the notifications,

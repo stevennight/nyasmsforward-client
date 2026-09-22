@@ -188,6 +188,18 @@ class ApiClient {
 
   Future<void> markRead(List<int> ids) async => _send('POST', '/api/v1/messages/read', body: {'ids': ids});
 
+  Future<List<int>> deleteMessages(List<int> ids) async {
+    final j = await _send('POST', '/api/v1/messages/delete', body: {'ids': ids});
+    return [for (final i in (j['deleted'] as List?) ?? const []) (i as num).toInt()];
+  }
+
+  Future<List<Message>> deletedMessages() async {
+    final j = await _send('GET', '/api/v1/messages/deleted');
+    return [for (final m in (j['items'] as List?) ?? const []) Message.fromJson((m as Map).cast<String, Object?>())];
+  }
+
+  Future<void> restoreMessage(int id) async => _send('POST', '/api/v1/messages/$id/restore');
+
   // --- sending -----------------------------------------------------------------------------------------------
 
   /// Reply to a received message: recipient, phone and SIM come from that message.
