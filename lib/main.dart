@@ -17,7 +17,7 @@ import 'src/session/settings_store.dart';
 import 'src/ui/format.dart';
 
 /// Keep in sync with pubspec.yaml (`tool/check_version.dart` verifies the release).
-const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.2.6');
+const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.2.7');
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
