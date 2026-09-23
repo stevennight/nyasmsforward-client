@@ -680,15 +680,20 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<List<Message>> deletedMessages() async {
+  Future<DeletedMessagesPage> deletedMessages({
+    int? before,
+    int? beforeAt,
+  }) async {
     final api = _api;
-    if (api == null || !scopes.canDelete) return const [];
+    if (api == null || !scopes.canDelete) {
+      return const DeletedMessagesPage(items: []);
+    }
     try {
-      return await api.deletedMessages();
+      return await api.deletedMessages(before: before, beforeAt: beforeAt);
     } on ApiException catch (e) {
       banner = e.text;
       notifyListeners();
-      return const [];
+      rethrow;
     }
   }
 

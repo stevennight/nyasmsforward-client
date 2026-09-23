@@ -153,6 +153,27 @@ void main() {
       },
     );
 
+    test(
+      'recycle-bin messages use a cursor page and keep deleted time',
+      () async {
+        final server = FakeServer({
+          'GET /api/v1/messages/deleted': (_) => {
+            'items': [
+              {...msgJson(9), 'deletedAt': 123456},
+            ],
+          },
+        });
+        final api = server.client('https://x.example', 't');
+        final page = await api.deletedMessages(before: 8, beforeAt: 123000);
+        expect(page.items.single.deletedAt, 123456);
+        expect(server.calls.single.uri.queryParameters, {
+          'before': '8',
+          'beforeAt': '123000',
+          'limit': '100',
+        });
+      },
+    );
+
     test('complete conversation deletion sends device or SIM-card identity for every selected group', () async {
       final server = FakeServer({
         'POST /api/v1/messages/delete-conversations': (_) => {'deleted': 8},

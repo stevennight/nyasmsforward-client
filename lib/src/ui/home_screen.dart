@@ -4,6 +4,7 @@ import '../api/models.dart';
 import '../session/app_controller.dart';
 import 'format.dart';
 import 'new_message_dialog.dart';
+import 'recycle_bin_screen.dart';
 import 'settings_screen.dart';
 import 'thread_view.dart';
 
@@ -107,9 +108,11 @@ class HomeScreen extends StatelessWidget {
                     key: const Key('openRecycleBin'),
                     tooltip: '回收站',
                     icon: const Icon(Icons.restore_from_trash_outlined),
-                    onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (_) => RecycleBinDialog(controller: controller),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            RecycleBinScreen(controller: controller),
+                      ),
                     ),
                   ),
                 if (controller.selectingMessages &&
@@ -169,77 +172,6 @@ class HomeScreen extends StatelessWidget {
       },
     );
   }
-}
-
-class RecycleBinDialog extends StatefulWidget {
-  const RecycleBinDialog({super.key, required this.controller});
-  final AppController controller;
-
-  @override
-  State<RecycleBinDialog> createState() => _RecycleBinDialogState();
-}
-
-class _RecycleBinDialogState extends State<RecycleBinDialog> {
-  late Future<List<Message>> _items = widget.controller.deletedMessages();
-
-  void _reload() =>
-      setState(() => _items = widget.controller.deletedMessages());
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('回收站'),
-    content: SizedBox(
-      width: 460,
-      child: FutureBuilder<List<Message>>(
-        future: _items,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final items = snapshot.data ?? const <Message>[];
-          if (items.isEmpty) {
-            return const Text('回收站为空。删除的短信保留 30 天。');
-          }
-          return ListView.builder(
-            shrinkWrap: true,
-            itemCount: items.length,
-            itemBuilder: (context, i) {
-              final m = items[i];
-              return ListTile(
-                title: Text(m.peer),
-                subtitle: Text(
-                  m.body,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: TextButton(
-                  onPressed: () async {
-                    final error = await widget.controller.restoreMessage(m.id);
-                    if (!context.mounted) {
-                      return;
-                    }
-                    if (error != null) {
-                      ScaffoldMessenger.of(context)
-                          .showSnackBar(SnackBar(content: Text(error)));
-                    } else {
-                      _reload();
-                    }
-                  },
-                  child: const Text('恢复'),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('关闭'),
-      ),
-    ],
-  );
 }
 
 Future<void> _confirmDelete(

@@ -43,6 +43,7 @@ class Message {
     this.code,
     this.readAt,
     this.backfill = false,
+    this.deletedAt,
   });
 
   factory Message.fromJson(Map<String, Object?> j) => Message(
@@ -61,6 +62,7 @@ class Message {
     code: _str(j['code']),
     readAt: _int(j['readAt']),
     backfill: j['backfill'] == true,
+    deletedAt: _int(j['deletedAt']),
   );
 
   final int id;
@@ -81,6 +83,9 @@ class Message {
   final int? readAt;
   final bool backfill;
 
+  /// Epoch millis at which the server moved this message to the recycle bin.
+  final int? deletedAt;
+
   bool get isIncoming => direction == Direction.incoming;
   bool get isUnread => isIncoming && readAt == null;
 
@@ -98,7 +103,15 @@ class Message {
     code: code,
     readAt: readAt ?? this.readAt,
     backfill: backfill,
+    deletedAt: deletedAt,
   );
+}
+
+/// One cursor page from the recycle bin.
+class DeletedMessagesPage {
+  const DeletedMessagesPage({required this.items});
+
+  final List<Message> items;
 }
 
 /// A thread with one number through one receiver phone.

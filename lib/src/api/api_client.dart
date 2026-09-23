@@ -328,12 +328,27 @@ class ApiClient {
     return (j['deleted'] as num?)?.toInt() ?? 0;
   }
 
-  Future<List<Message>> deletedMessages() async {
-    final j = await _send('GET', '/api/v1/messages/deleted');
-    return [
-      for (final m in (j['items'] as List?) ?? const [])
-        Message.fromJson((m as Map).cast<String, Object?>()),
-    ];
+  static const recyclePage = 100;
+
+  Future<DeletedMessagesPage> deletedMessages({
+    int? before,
+    int? beforeAt,
+  }) async {
+    final j = await _send(
+      'GET',
+      '/api/v1/messages/deleted',
+      query: {
+        'before': before?.toString(),
+        'beforeAt': beforeAt?.toString(),
+        'limit': '$recyclePage',
+      },
+    );
+    return DeletedMessagesPage(
+      items: [
+        for (final m in (j['items'] as List?) ?? const [])
+          Message.fromJson((m as Map).cast<String, Object?>()),
+      ],
+    );
   }
 
   Future<void> restoreMessage(int id) async =>
