@@ -56,6 +56,9 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
+            android:exported="false" />
         <!--
           The background connection (flutter_foreground_task). specialUse: a long-lived connection to the user's own
           server has no better fitting type, and unlike dataSync it has no 6 hour limit on Android 15.

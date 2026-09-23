@@ -9,6 +9,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../pairing/token_store.dart';
 import '../session/settings_store.dart';
+import '../ui/format.dart';
 import 'notification_content.dart';
 
 /// Shows and clears the notifications for new messages. Behind an interface so the app logic does not depend on a plugin.
@@ -25,7 +26,7 @@ abstract interface class NotificationService {
 class NotificationHandlers {
   const NotificationHandlers({required this.copyCode, required this.open, required this.reply});
 
-  /// Copies [code] (the app has just been brought to the foreground by the button).
+  /// Copies [code] without opening a conversation.
   final Future<void> Function(String code) copyCode;
 
   /// Opens the conversation the notification belongs to.
@@ -96,7 +97,7 @@ class LocalNotificationService implements NotificationService {
         styleInformation: BigTextStyleInformation(content.body),
         actions: [
           if (actions.contains(NotificationAction.copyCode))
-            const AndroidNotificationAction(NotificationAction.copyCode, '复制验证码', showsUserInterface: true, cancelNotification: false),
+            const AndroidNotificationAction(NotificationAction.copyCode, '复制验证码', showsUserInterface: false, cancelNotification: false),
           if (actions.contains(NotificationAction.reply))
             const AndroidNotificationAction(
               NotificationAction.reply,
@@ -163,15 +164,16 @@ Future<void> dispatchResponse(NotificationResponse r, NotificationHandlers handl
   }
 }
 
-/// Android calls this in a background isolate when a notification button that does not open the app is used and the app
-/// is not in the foreground (the inline reply). It has no access to the running app, so it rebuilds what it needs from
-/// storage: the token from the secure store and the address from the settings.
+/// Android calls this in a background isolate when a notification button does not open the app. It has no access to
+/// the running app, so a reply rebuilds what it needs from storage; copying uses the platform clipboard directly.
 @pragma('vm:entry-point')
 Future<void> notificationBackgroundHandler(NotificationResponse response) async {
   DartPluginRegistrant.ensureInitialized(); // this isolate has no plugins registered yet (storage, notifications)
   final service = LocalNotificationService(
     handlers: NotificationHandlers(
-      copyCode: (_) async {},
+      copyCode: (code) async {
+        await copyText(code);
+      },
       open: (_) {},
       reply: (to, text) => replyFromStorage(to.messageId, text),
     ),

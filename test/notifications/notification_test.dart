@@ -5,6 +5,7 @@ import 'package:client/src/notifications/notification_service.dart';
 import 'package:client/src/pairing/token_store.dart';
 import 'package:client/src/session/settings_store.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' hide Message;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fake_server.dart';
@@ -26,6 +27,7 @@ class RecordingNotifier implements NotificationService {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('content', () {
     test('a verification code leads the title, so it can be read from the lock screen', () {
       final c = contentFor(message());
@@ -114,6 +116,26 @@ void main() {
       await dispatchResponse(const NotificationResponse(notificationResponseType: NotificationResponseType.selectedNotification, actionId: 'copy'), handlers, notifier);
       expect(log, isEmpty);
     });
+  });
+
+  test('the Android background copy action writes the code to the clipboard', () async {
+    String? copied;
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map<Object?, Object?>)['text'] as String?;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await notificationBackgroundHandler(NotificationResponse(
+      notificationResponseType: NotificationResponseType.selectedNotificationAction,
+      actionId: NotificationAction.copyCode,
+      payload: NotificationPayload.forMessage(message()).encode(),
+    ));
+
+    expect(copied, '583921');
   });
 
   group('replying from a background isolate uses only stored data', () {
