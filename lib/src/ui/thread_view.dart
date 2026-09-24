@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../api/models.dart';
 import '../session/app_controller.dart';
+import 'delete_dialog.dart';
 import 'format.dart';
 
 /// One conversation: the messages, the latest verification code, the send tasks and the reply box.
@@ -17,6 +18,13 @@ class ThreadView extends StatelessWidget {
     if (c == null) return const Center(child: Text('选择一个会话查看内容'));
     final phone = controller.phoneFor(c.deviceId);
     final messages = controller.thread;
+    Message? lastIncoming;
+    for (final m in messages.reversed) {
+      if (m.isIncoming) {
+        lastIncoming = m;
+        break;
+      }
+    }
     Message? codeMessage;
     for (final m in messages.reversed) {
       if (m.code != null && m.code!.isNotEmpty) {
@@ -35,16 +43,64 @@ class ThreadView extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(c.peer, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    Text(phone?.name ?? c.deviceId, style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      c.peer,
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      phone?.name ?? c.deviceId,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
                 ),
               ),
+              if (controller.scopes.canDelete)
+                IconButton(
+                  key: const Key('toggleMessageSelection'),
+                  tooltip: controller.selectingMessages ? '退出短信选择' : '选择短信',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    controller.selectingMessages
+                        ? Icons.close
+                        : Icons.checklist,
+                  ),
+                  onPressed: () => controller.setMessageSelection(
+                    !controller.selectingMessages,
+                  ),
+                ),
+              if (!controller.selectingMessages &&
+                  lastIncoming != null &&
+                  controller.scopes.canRead)
+                IconButton(
+                  key: const Key('markThreadUnread'),
+                  tooltip: '标为未读',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.mark_email_unread_outlined),
+                  onPressed: () =>
+                      _markThreadUnread(context, controller, lastIncoming!.id),
+                ),
               if (controller.selectingMessages && messages.isNotEmpty)
                 TextButton(
                   key: const Key('selectThreadMessages'),
                   onPressed: controller.selectCurrentThread,
-                  child: Text(messages.every((m) => controller.selectedMessageIds.contains(m.id)) ? '取消全选' : '全选'),
+                  child: Text(
+                    messages.every(
+                          (m) => controller.selectedMessageIds.contains(m.id),
+                        )
+                        ? '取消全选'
+                        : '全选',
+                  ),
+                ),
+              if (controller.selectingMessages &&
+                  controller.selectedMessageIds.isNotEmpty &&
+                  controller.scopes.canDelete)
+                IconButton(
+                  key: const Key('deleteSelectedMessages'),
+                  tooltip: '删除选中短信',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () => _confirmThreadDelete(context, controller),
                 ),
             ],
           ),
@@ -56,13 +112,44 @@ class ThreadView extends StatelessWidget {
             reverse: true,
             padding: const EdgeInsets.all(12),
             itemCount: messages.length,
-            itemBuilder: (context, i) => Bubble(message: messages[messages.length - 1 - i], controller: controller),
+            itemBuilder: (context, i) => Bubble(
+              message: messages[messages.length - 1 - i],
+              controller: controller,
+            ),
           ),
         ),
         ReplyBox(controller: controller),
       ],
     );
   }
+}
+
+Future<void> _markThreadUnread(
+  BuildContext context,
+  AppController controller,
+  int id,
+) async {
+  final error = await controller.markSelectedMessageUnread(id);
+  if (!context.mounted || error == null) return;
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+}
+
+Future<void> _confirmThreadDelete(
+  BuildContext context,
+  AppController controller,
+) async {
+  final count = controller.selectedMessageIds.length;
+  final deletePhone = await confirmDeleteWithPhoneOption(
+    context,
+    title: '移到回收站？',
+    message: '选中的 $count 条短信将保留在回收站 30 天，之后永久删除。',
+  );
+  if (deletePhone == null || !context.mounted) return;
+  final error = await controller.deleteSelectedMessages(
+    deletePhone: deletePhone,
+  );
+  if (!context.mounted || error == null) return;
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
 }
 
 /// The verification code the server recognised, with a one-tap copy.
@@ -89,7 +176,12 @@ class _CodeCardState extends State<CodeCard> {
         subtitle: Text(
           widget.code,
           key: const Key('codeText'),
-          style: theme.textTheme.headlineSmall?.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.w800, letterSpacing: 3, color: theme.colorScheme.primary),
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w800,
+            letterSpacing: 3,
+            color: theme.colorScheme.primary,
+          ),
         ),
         trailing: FilledButton.tonal(
           key: const Key('copyCode'),
@@ -119,18 +211,26 @@ class Bubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final out = !message.isIncoming;
-    final via = out ? (message.origin == 'device' ? ' · 手机上发出' : ' · 经平台发出') : '';
+    final via = out
+        ? (message.origin == 'device' ? ' · 手机上发出' : ' · 经平台发出')
+        : '';
     final sim = message.simSlot != null ? ' · SIM${message.simSlot}' : '';
     return Align(
       alignment: out ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.8,
+        ),
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: out ? theme.colorScheme.primaryContainer : theme.colorScheme.surface,
-            border: out ? null : Border.all(color: theme.colorScheme.outlineVariant),
+            color: out
+                ? theme.colorScheme.primaryContainer
+                : theme.colorScheme.surface,
+            border: out
+                ? null
+                : Border.all(color: theme.colorScheme.outlineVariant),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -144,7 +244,8 @@ class Bubble extends StatelessWidget {
                     Checkbox(
                       key: Key('selectMessage_${message.id}'),
                       value: controller.selectedMessageIds.contains(message.id),
-                      onChanged: (_) => controller.toggleMessageSelection(message.id),
+                      onChanged: (_) =>
+                          controller.toggleMessageSelection(message.id),
                     ),
                     Flexible(child: SelectableText(message.body)),
                   ],
@@ -155,13 +256,22 @@ class Bubble extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('${clock(message.deviceTime)}$via$sim', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                  if (!controller.selectingMessages && controller.scopes.canDelete)
+                  Text(
+                    '${clock(message.deviceTime)}$via$sim',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (!controller.selectingMessages &&
+                      controller.scopes.canDelete)
                     IconButton(
                       tooltip: '删除这条短信',
                       visualDensity: VisualDensity.compact,
                       iconSize: 16,
-                      onPressed: () { controller.toggleMessageSelection(message.id); controller.setMessageSelection(true); },
+                      onPressed: () {
+                        controller.toggleMessageSelection(message.id);
+                        controller.setMessageSelection(true);
+                      },
                       icon: const Icon(Icons.delete_outline),
                     ),
                 ],
@@ -200,7 +310,11 @@ class _ReplyBoxState extends State<ReplyBox> {
 
   Future<void> _send() async {
     final body = _text.text;
-    if (_sending || body.trim().isEmpty || widget.controller.replyBlockedReason != null) return;
+    if (_sending ||
+        body.trim().isEmpty ||
+        widget.controller.replyBlockedReason != null) {
+      return;
+    }
     setState(() {
       _sending = true;
       _problem = null;
@@ -215,9 +329,16 @@ class _ReplyBoxState extends State<ReplyBox> {
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent || event.logicalKey != LogicalKeyboardKey.enter) return KeyEventResult.ignored;
-    if (HardwareKeyboard.instance.isShiftPressed) return KeyEventResult.ignored; // newline
-    if (_text.value.composing.isValid && !_text.value.composing.isCollapsed) return KeyEventResult.ignored; // IME candidate
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.enter) {
+      return KeyEventResult.ignored;
+    }
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      return KeyEventResult.ignored; // newline
+    }
+    if (_text.value.composing.isValid && !_text.value.composing.isCollapsed) {
+      return KeyEventResult.ignored; // IME candidate
+    }
     _send();
     return KeyEventResult.handled;
   }
@@ -227,12 +348,18 @@ class _ReplyBoxState extends State<ReplyBox> {
     final controller = widget.controller;
     final theme = Theme.of(context);
     final blocked = controller.replyBlockedReason;
-    final phone = controller.selected == null ? null : controller.phoneFor(controller.selected!.deviceId);
+    final phone = controller.selected == null
+        ? null
+        : controller.phoneFor(controller.selected!.deviceId);
 
     return Material(
       color: theme.scaffoldBackgroundColor,
       child: Container(
-        decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.colorScheme.outlineVariant))),
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(color: theme.colorScheme.outlineVariant),
+          ),
+        ),
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -253,7 +380,9 @@ class _ReplyBoxState extends State<ReplyBox> {
                         ? null
                         : () {
                             _text.text = q; // fills the box; sending stays a deliberate second step
-                            _text.selection = TextSelection.collapsed(offset: q.length);
+                            _text.selection = TextSelection.collapsed(
+                              offset: q.length,
+                            );
                             _focus.requestFocus();
                           },
                   ),
@@ -274,8 +403,17 @@ class _ReplyBoxState extends State<ReplyBox> {
                       minLines: 1,
                       maxLines: 4,
                       maxLength: 1000,
-                      buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
-                      decoration: InputDecoration(hintText: blocked != null ? '无法回复' : '回复这个号码（Enter 发送，Shift+Enter 换行）'),
+                      buildCounter: (
+                        _, {
+                        required currentLength,
+                        required isFocused,
+                        maxLength,
+                      }) => null,
+                      decoration: InputDecoration(
+                        hintText: blocked != null
+                            ? '无法回复'
+                            : '回复这个号码（Enter 发送，Shift+Enter 换行）',
+                      ),
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
@@ -283,8 +421,13 @@ class _ReplyBoxState extends State<ReplyBox> {
                 const SizedBox(width: 8),
                 FilledButton(
                   key: const Key('sendReply'),
-                  style: FilledButton.styleFrom(minimumSize: const Size(64, 44)),
-                  onPressed: blocked != null || _sending || _text.text.trim().isEmpty ? null : _send,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(64, 44),
+                  ),
+                  onPressed:
+                      blocked != null || _sending || _text.text.trim().isEmpty
+                      ? null
+                      : _send,
                   child: const Text('发送'),
                 ),
               ],
@@ -292,7 +435,11 @@ class _ReplyBoxState extends State<ReplyBox> {
             if (_problem != null)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: Text(_problem!, key: const Key('replyProblem'), style: TextStyle(color: theme.colorScheme.error)),
+                child: Text(
+                  _problem!,
+                  key: const Key('replyProblem'),
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
               ),
           ],
         ),
@@ -312,8 +459,16 @@ class _Note extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: theme.colorScheme.primaryContainer, borderRadius: BorderRadius.circular(8)),
-      child: Text(text, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onPrimaryContainer,
+        ),
+      ),
     );
   }
 }
@@ -337,16 +492,30 @@ class TaskStrip extends StatelessWidget {
           for (final t in tasks)
             Row(
               children: [
-                Expanded(child: Text(t.body, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall)),
+                Expanded(
+                  child: Text(
+                    t.body,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Text(
                   t.summary,
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: t.status == TaskStatus.failed || t.status == TaskStatus.expired ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant,
+                    color:
+                        t.status == TaskStatus.failed ||
+                            t.status == TaskStatus.expired
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
                 if (t.status == TaskStatus.queued)
-                  TextButton(onPressed: () => controller.cancelTask(t.taskId), child: const Text('取消')),
+                  TextButton(
+                    onPressed: () => controller.cancelTask(t.taskId),
+                    child: const Text('取消'),
+                  ),
               ],
             ),
         ],

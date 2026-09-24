@@ -293,14 +293,46 @@ class ApiClient {
     ];
   }
 
+  Future<void> markUnread(int id) async =>
+      _send('POST', '/api/v1/messages/$id/unread');
+
+  Future<List<int>> markConversationsReadState(
+    List<Conversation> conversations, {
+    required bool unread,
+  }) async {
+    final j = await _send(
+      'POST',
+      '/api/v1/messages/conversations/read-state',
+      body: {
+        'unread': unread,
+        'conversations': [
+          for (final c in conversations)
+            {
+              'peerKey': c.peerKey,
+              if (c.cardNumber == null || c.cardNumber!.isEmpty)
+                'deviceId': c.deviceId
+              else
+                'cardNumber': c.cardNumber,
+            },
+        ],
+      },
+    );
+    return [
+      for (final i in (j['changed'] as List?) ?? const []) (i as num).toInt(),
+    ];
+  }
+
   Future<void> markRead(List<int> ids) async =>
       _send('POST', '/api/v1/messages/read', body: {'ids': ids});
 
-  Future<List<int>> deleteMessages(List<int> ids) async {
+  Future<List<int>> deleteMessages(
+    List<int> ids, {
+    bool deletePhone = false,
+  }) async {
     final j = await _send(
       'POST',
       '/api/v1/messages/delete',
-      body: {'ids': ids},
+      body: {'ids': ids, if (deletePhone) 'deletePhone': true},
     );
     return [
       for (final i in (j['deleted'] as List?) ?? const []) (i as num).toInt(),
@@ -308,7 +340,10 @@ class ApiClient {
   }
 
   /// Moves all messages in each selected number thread to the recycle bin, without a page-size limit.
-  Future<int> deleteConversations(List<Conversation> conversations) async {
+  Future<int> deleteConversations(
+    List<Conversation> conversations, {
+    bool deletePhone = false,
+  }) async {
     final j = await _send(
       'POST',
       '/api/v1/messages/delete-conversations',
@@ -323,6 +358,7 @@ class ApiClient {
                 'cardNumber': c.cardNumber,
             },
         ],
+        if (deletePhone) 'deletePhone': true,
       },
     );
     return (j['deleted'] as num?)?.toInt() ?? 0;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/models.dart';
 import '../session/app_controller.dart';
+import 'delete_dialog.dart';
 import 'format.dart';
 import 'new_message_dialog.dart';
 import 'recycle_bin_screen.dart';
@@ -73,36 +74,6 @@ class HomeScreen extends StatelessWidget {
                       ? controller.markAllRead
                       : null,
                 ),
-                if (controller.scopes.canDelete && (wide || !showThreadOnly))
-                  IconButton(
-                    key: const Key('toggleConversationSelection'),
-                    tooltip: controller.selectingConversations
-                        ? '退出会话选择'
-                        : '选择会话',
-                    icon: Icon(
-                      controller.selectingConversations
-                          ? Icons.close
-                          : Icons.playlist_add_check,
-                    ),
-                    onPressed: () => controller.setConversationSelection(
-                      !controller.selectingConversations,
-                    ),
-                  ),
-                if (selected != null &&
-                    controller.scopes.canDelete &&
-                    !controller.selectingConversations)
-                  IconButton(
-                    key: const Key('toggleMessageSelection'),
-                    tooltip: controller.selectingMessages ? '退出多选' : '多选删除',
-                    icon: Icon(
-                      controller.selectingMessages
-                          ? Icons.close
-                          : Icons.checklist,
-                    ),
-                    onPressed: () => controller.setMessageSelection(
-                      !controller.selectingMessages,
-                    ),
-                  ),
                 if (controller.scopes.canDelete)
                   IconButton(
                     key: const Key('openRecycleBin'),
@@ -114,24 +85,6 @@ class HomeScreen extends StatelessWidget {
                             RecycleBinScreen(controller: controller),
                       ),
                     ),
-                  ),
-                if (controller.selectingMessages &&
-                    controller.selectedMessageIds.isNotEmpty)
-                  IconButton(
-                    key: const Key('deleteSelectedMessages'),
-                    tooltip: '删除选中 ${controller.selectedMessageIds.length} 条',
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => _confirmDelete(context, controller),
-                  ),
-                if (controller.selectingConversations &&
-                    controller.selectedConversations.isNotEmpty)
-                  IconButton(
-                    key: const Key('deleteSelectedConversations'),
-                    tooltip:
-                        '删除选中 ${controller.selectedConversations.length} 个会话',
-                    icon: const Icon(Icons.delete_sweep_outlined),
-                    onPressed: () =>
-                        _confirmConversationDelete(context, controller),
                   ),
                 IconButton(
                   key: const Key('openSettings'),
@@ -174,72 +127,22 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-Future<void> _confirmDelete(
-  BuildContext context,
-  AppController controller,
-) async {
-  final count = controller.selectedMessageIds.length;
-  final okay = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('移到回收站？'),
-      content: Text('选中的 $count 条短信将保留在回收站 30 天，之后永久删除。'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('删除'),
-        ),
-      ],
-    ),
-  );
-  if (okay != true) {
-    return;
-  }
-  if (!context.mounted) {
-    return;
-  }
-  final error = await controller.deleteSelectedMessages();
-  if (!context.mounted) {
-    return;
-  }
-  if (error != null) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
-  }
-}
-
 Future<void> _confirmConversationDelete(
   BuildContext context,
   AppController controller,
 ) async {
   final count = controller.selectedConversations.length;
-  final okay = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('移除完整会话？'),
-      content: Text('选中的 $count 个号码会话及其全部短信将保留在回收站 30 天，之后永久删除。'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('删除'),
-        ),
-      ],
-    ),
+  final deletePhone = await confirmDeleteWithPhoneOption(
+    context,
+    title: '移除完整会话？',
+    message: '选中的 $count 个号码会话及其全部短信将保留在回收站 30 天，之后永久删除。',
   );
-  if (okay != true) {
+  if (deletePhone == null || !context.mounted) {
     return;
   }
-  if (!context.mounted) {
-    return;
-  }
-  final error = await controller.deleteSelectedConversations();
+  final error = await controller.deleteSelectedConversations(
+    deletePhone: deletePhone,
+  );
   if (!context.mounted) {
     return;
   }
@@ -354,6 +257,86 @@ class _ConversationListState extends State<ConversationList> {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 8, 4),
+          child: Row(
+            children: [
+              Text(
+                '会话',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text('${items.length} 个', style: theme.textTheme.labelSmall),
+              const Spacer(),
+              if (controller.scopes.canRead)
+                IconButton(
+                  key: const Key('toggleConversationSelection'),
+                  tooltip: controller.selectingConversations
+                      ? '退出会话选择'
+                      : '选择会话',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    controller.selectingConversations
+                        ? Icons.close
+                        : Icons.playlist_add_check,
+                  ),
+                  onPressed: () => controller.setConversationSelection(
+                    !controller.selectingConversations,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (controller.selectingConversations &&
+            controller.selectedConversations.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+            child: Card(
+              margin: EdgeInsets.zero,
+              color: theme.colorScheme.primaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  runSpacing: 2,
+                  children: [
+                    Text(
+                      '已选 ${controller.selectedConversations.length} 个',
+                      style: theme.textTheme.labelMedium,
+                    ),
+                    TextButton(
+                      onPressed: () => _markSelectedConversations(
+                        context,
+                        controller,
+                        unread: false,
+                      ),
+                      child: const Text('标为已读'),
+                    ),
+                    TextButton(
+                      onPressed: () => _markSelectedConversations(
+                        context,
+                        controller,
+                        unread: true,
+                      ),
+                      child: const Text('标为未读'),
+                    ),
+                    if (controller.scopes.canDelete)
+                      IconButton(
+                        key: const Key('deleteSelectedConversations'),
+                        tooltip: '删除选中会话',
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.delete_sweep_outlined),
+                        onPressed: () =>
+                            _confirmConversationDelete(context, controller),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         Expanded(
           child: items.isEmpty
               ? Center(
@@ -395,6 +378,18 @@ class _ConversationListState extends State<ConversationList> {
   }
 }
 
+Future<void> _markSelectedConversations(
+  BuildContext context,
+  AppController controller, {
+  required bool unread,
+}) async {
+  final error = await controller.markSelectedConversationsReadState(
+    unread: unread,
+  );
+  if (!context.mounted || error == null) return;
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+}
+
 class ConversationTile extends StatelessWidget {
   const ConversationTile({
     super.key,
@@ -424,7 +419,15 @@ class ConversationTile extends StatelessWidget {
       selected: selected || (selecting && deleteSelected),
       onTap: onTap,
       leading: selecting
-          ? Checkbox(value: deleteSelected, onChanged: (_) => onToggle())
+          ? SizedBox(
+              width: 40,
+              child: Center(
+                child: Checkbox(
+                  value: deleteSelected,
+                  onChanged: (_) => onToggle(),
+                ),
+              ),
+            )
           : null,
       title: Row(
         children: [

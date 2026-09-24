@@ -86,6 +86,7 @@ class AppController extends ChangeNotifier {
   bool selectingConversations = false;
   Map<String, Conversation> selectedConversations = <String, Conversation>{};
   List<OutboundTask> tasks = const [];
+  String? _holdUnreadKey;
 
   Scopes get scopes =>
       Scopes({for (final s in settings.scopes) ?Scope.tryParse(s)});
@@ -336,7 +337,7 @@ class AppController extends ChangeNotifier {
             limit: 3,
           )
         : const [];
-    if (thread.any((m) => m.isUnread)) {
+    if (thread.any((m) => m.isUnread) && _holdUnreadKey != open.key) {
       await api.markThreadRead(
         open.deviceId,
         open.peer,
@@ -355,6 +356,9 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> openConversation(Conversation? c) async {
+    if (selected != null && (c == null || selected!.key != c.key)) {
+      _holdUnreadKey = null;
+    }
     selected = c;
     thread = const [];
     tasks = const [];
@@ -515,6 +519,7 @@ class AppController extends ChangeNotifier {
   Future<void> markAllRead() async {
     final api = _api;
     if (api == null) return;
+    _holdUnreadKey = null;
     for (final c in conversations.where((c) => c.unread > 0)) {
       try {
         await api.markThreadRead(c.deviceId, c.peer, cardNumber: c.cardNumber);
@@ -523,6 +528,51 @@ class AppController extends ChangeNotifier {
       }
     }
     await refreshAll();
+  }
+
+  Future<String?> markSelectedConversationsReadState({
+    required bool unread,
+  }) async {
+    if (!scopes.canRead) return '这个客户端没有“查看”权限，可以在 Web 的设备页调整';
+    final api = _api;
+    if (api == null || selectedConversations.isEmpty) return null;
+    final selectedKeys = selectedConversations.keys.toSet();
+    try {
+      await api.markConversationsReadState(
+        selectedConversations.values.toList(),
+        unread: unread,
+      );
+      if (unread && selected != null && selectedKeys.contains(selected!.key)) {
+        _holdUnreadKey = selected!.key;
+      }
+      if (!unread && selected != null && selectedKeys.contains(selected!.key)) {
+        _holdUnreadKey = null;
+      }
+      selectingConversations = false;
+      selectedConversations = <String, Conversation>{};
+      await refreshAll();
+      return null;
+    } on ApiException catch (e) {
+      return e.text;
+    }
+  }
+
+  Future<String?> markSelectedMessageUnread(int id) async {
+    if (!scopes.canRead) return '这个客户端没有“查看”权限，可以在 Web 的设备页调整';
+    final api = _api;
+    final open = selected;
+    if (api == null || open == null) return null;
+    try {
+      await api.markUnread(id);
+      _holdUnreadKey = open.key;
+      thread = [
+        for (final m in thread) m.id == id ? m.copyWith(readAt: null) : m,
+      ];
+      await refreshAll();
+      return null;
+    } on ApiException catch (e) {
+      return e.text;
+    }
   }
 
   // --- settings ------------------------------------------------------------------------------------------------
@@ -647,12 +697,15 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> deleteSelectedMessages() async {
+  Future<String?> deleteSelectedMessages({bool deletePhone = false}) async {
     if (!scopes.canDelete) return '这个客户端没有“删除”权限，可以在 Web 的设备页调整';
     final api = _api;
     if (api == null || selectedMessageIds.isEmpty) return null;
     try {
-      await api.deleteMessages(selectedMessageIds.toList());
+      await api.deleteMessages(
+        selectedMessageIds.toList(),
+        deletePhone: deletePhone,
+      );
       selectingMessages = false;
       selectedMessageIds = <int>{};
       await refreshAll();
@@ -662,12 +715,17 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<String?> deleteSelectedConversations() async {
+  Future<String?> deleteSelectedConversations({
+    bool deletePhone = false,
+  }) async {
     if (!scopes.canDelete) return '这个客户端没有“删除”权限，可以在 Web 的设备页调整';
     final api = _api;
     if (api == null || selectedConversations.isEmpty) return null;
     try {
-      await api.deleteConversations(selectedConversations.values.toList());
+      await api.deleteConversations(
+        selectedConversations.values.toList(),
+        deletePhone: deletePhone,
+      );
       selectingConversations = false;
       selectedConversations = <String, Conversation>{};
       selected = null;
