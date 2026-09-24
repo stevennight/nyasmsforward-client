@@ -134,7 +134,7 @@ void main() {
       await tester.tap(byKey('connect'));
       await tester.pumpAndSettle();
       expect(find.byType(AppBar), findsOneWidget);
-      expect(find.text('106901234'), findsWidgets);
+      expect(find.textContaining('106901234', findRichText: true), findsWidgets);
       expect(await rig.tokens.read(), 'nsf_new');
     });
 
@@ -246,7 +246,7 @@ void main() {
       await tester.tap(byKey('copyCode'));
       await tester.pump(const Duration(milliseconds: 100));
       expect(copied, '583921');
-      expect(find.text('已复制 ✓'), findsOneWidget);
+      expect(find.text('已复制'), findsOneWidget);
       await tester.pump(const Duration(seconds: 2));
     });
 
@@ -432,7 +432,7 @@ void main() {
       await openThread(tester);
       expect(find.textContaining('平台：仅回复；手机：关闭'), findsOneWidget);
       expect(tester.widget<TextField>(byKey('replyField')).enabled, isFalse);
-      expect(tester.widget<FilledButton>(byKey('sendReply')).onPressed, isNull);
+      expect(tester.widget<IconButton>(byKey('sendReply')).onPressed, isNull);
     });
 
     testWidgets('a client without the reply permission cannot reply', (

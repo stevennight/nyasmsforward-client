@@ -5,6 +5,16 @@ import '../api/models.dart';
 import '../session/app_controller.dart';
 import 'delete_dialog.dart';
 import 'format.dart';
+import 'widgets.dart';
+
+/// The sender name of a conversation, from its newest message that carries one.
+String? _brandOf(List<Message> messages, String fallback) {
+  for (final m in messages.reversed) {
+    final b = senderBrand(m.body);
+    if (b != null) return b;
+  }
+  return senderBrand(fallback);
+}
 
 /// One conversation: the messages, the latest verification code, the send tasks and the reply box.
 class ThreadView extends StatelessWidget {
@@ -35,22 +45,37 @@ class ThreadView extends StatelessWidget {
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
+          ),
           child: Row(
             children: [
+              PeerAvatar(peer: c.peer, brand: _brandOf(messages, c.last.body), size: 38),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      c.peer,
+                      _brandOf(messages, c.last.body) ?? c.peer,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                          ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     Text(
-                      phone?.name ?? c.deviceId,
-                      style: Theme.of(context).textTheme.bodySmall,
+                      [
+                        if (_brandOf(messages, c.last.body) != null) c.peer,
+                        phone?.name ?? c.deviceId,
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -165,37 +190,56 @@ class CodeCard extends StatefulWidget {
 class _CodeCardState extends State<CodeCard> {
   bool _copied = false;
 
+  Future<void> _copy() async {
+    final ok = await copyText(widget.code);
+    if (!mounted) return;
+    setState(() => _copied = ok);
+    Future<void>.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: ListTile(
-        dense: true,
-        title: Text('识别到验证码', style: theme.textTheme.bodySmall),
-        subtitle: Text(
-          widget.code,
-          key: const Key('codeText'),
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontFamily: 'monospace',
-            fontWeight: FontWeight.w800,
-            letterSpacing: 3,
-            color: theme.colorScheme.primary,
+    final scheme = theme.colorScheme;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+      padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.verified_user_outlined, color: scheme.primary, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('验证码', style: theme.textTheme.labelSmall?.copyWith(color: scheme.onPrimaryContainer)),
+                Text(
+                  widget.code,
+                  key: const Key('codeText'),
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 4,
+                    color: scheme.primary,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        trailing: FilledButton.tonal(
-          key: const Key('copyCode'),
-          style: FilledButton.styleFrom(minimumSize: const Size(72, 36)),
-          onPressed: () async {
-            final ok = await copyText(widget.code);
-            if (!mounted) return;
-            setState(() => _copied = ok);
-            Future<void>.delayed(const Duration(milliseconds: 1500), () {
-              if (mounted) setState(() => _copied = false);
-            });
-          },
-          child: Text(_copied ? '已复制 ✓' : '复制'),
-        ),
+          FilledButton.icon(
+            key: const Key('copyCode'),
+            style: FilledButton.styleFrom(minimumSize: const Size(88, 40)),
+            onPressed: _copy,
+            icon: Icon(_copied ? Icons.check : Icons.copy_rounded, size: 18),
+            label: Text(_copied ? '已复制' : '复制'),
+          ),
+        ],
       ),
     );
   }
@@ -215,6 +259,12 @@ class Bubble extends StatelessWidget {
         ? (message.origin == 'device' ? ' · 手机上发出' : ' · 经平台发出')
         : '';
     final sim = message.simSlot != null ? ' · SIM${message.simSlot}' : '';
+    final bodyStyle = theme.textTheme.bodyLarge?.copyWith(
+      color: out ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
+    );
+    final metaColor = out
+        ? theme.colorScheme.onPrimary.withValues(alpha: .75)
+        : theme.colorScheme.onSurfaceVariant;
     return Align(
       alignment: out ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
@@ -223,15 +273,18 @@ class Bubble extends StatelessWidget {
         ),
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.fromLTRB(14, 10, 10, 6),
           decoration: BoxDecoration(
-            color: out
-                ? theme.colorScheme.primaryContainer
-                : theme.colorScheme.surface,
+            color: out ? theme.colorScheme.primary : theme.colorScheme.surface,
             border: out
                 ? null
                 : Border.all(color: theme.colorScheme.outlineVariant),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(18),
+              topRight: const Radius.circular(18),
+              bottomLeft: Radius.circular(out ? 18 : 4),
+              bottomRight: Radius.circular(out ? 4 : 18),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,20 +300,18 @@ class Bubble extends StatelessWidget {
                       onChanged: (_) =>
                           controller.toggleMessageSelection(message.id),
                     ),
-                    Flexible(child: SelectableText(message.body)),
+                    Flexible(child: SelectableText(message.body, style: bodyStyle)),
                   ],
                 )
               else
-                SelectableText(message.body),
+                SelectableText(message.body, style: bodyStyle),
               const SizedBox(height: 2),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     '${clock(message.deviceTime)}$via$sim',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    style: theme.textTheme.labelSmall?.copyWith(color: metaColor),
                   ),
                   if (!controller.selectingMessages &&
                       controller.scopes.canDelete)
@@ -268,6 +319,9 @@ class Bubble extends StatelessWidget {
                       tooltip: '删除这条短信',
                       visualDensity: VisualDensity.compact,
                       iconSize: 16,
+                      color: metaColor,
+                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                      padding: EdgeInsets.zero,
                       onPressed: () {
                         controller.toggleMessageSelection(message.id);
                         controller.setMessageSelection(true);
@@ -353,7 +407,7 @@ class _ReplyBoxState extends State<ReplyBox> {
         : controller.phoneFor(controller.selected!.deviceId);
 
     return Material(
-      color: theme.scaffoldBackgroundColor,
+      color: theme.colorScheme.surface,
       child: Container(
         decoration: BoxDecoration(
           border: Border(
@@ -372,9 +426,12 @@ class _ReplyBoxState extends State<ReplyBox> {
               const _Note('手机当前不在线：任务会先排队，手机上线后发出；超过有效期仍未上线则过期。'),
             Wrap(
               spacing: 6,
+              runSpacing: 4,
               children: [
                 for (final q in controller.settings.quickReplies)
                   ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    avatar: const Icon(Icons.bolt_rounded, size: 16),
                     label: Text(q),
                     onPressed: blocked != null
                         ? null
@@ -412,23 +469,35 @@ class _ReplyBoxState extends State<ReplyBox> {
                       decoration: InputDecoration(
                         hintText: blocked != null
                             ? '无法回复'
-                            : '回复这个号码（Enter 发送，Shift+Enter 换行）',
+                            : '回复短信（Enter 发送，Shift+Enter 换行）',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(22),
+                          borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(22),
+                          borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(22),
+                          borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.6),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                FilledButton(
+                IconButton.filled(
                   key: const Key('sendReply'),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(64, 44),
-                  ),
+                  tooltip: '发送',
+                  style: IconButton.styleFrom(minimumSize: const Size(46, 46)),
                   onPressed:
                       blocked != null || _sending || _text.text.trim().isEmpty
                       ? null
                       : _send,
-                  child: const Text('发送'),
+                  icon: const Icon(Icons.send_rounded, size: 20),
                 ),
               ],
             ),

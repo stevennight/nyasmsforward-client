@@ -6,6 +6,12 @@ const _lightScheme = ColorScheme.light(
   onPrimary: Colors.white,
   primaryContainer: Color(0xFFEEF1FF),
   onPrimaryContainer: Color(0xFF354FC0),
+  // Without these Material falls back to its teal secondary, which showed up on tonal buttons.
+  secondary: Color(0xFF4964D8),
+  onSecondary: Colors.white,
+  secondaryContainer: Color(0xFFE4E9FF),
+  onSecondaryContainer: Color(0xFF2B3F9E),
+  tertiary: Color(0xFF0E9384),
   surface: Color(0xFFFFFFFF),
   onSurface: Color(0xFF181C23),
   surfaceContainerHighest: Color(0xFFEEF2F8),
@@ -20,6 +26,11 @@ const _darkScheme = ColorScheme.dark(
   onPrimary: Color(0xFF0F1319),
   primaryContainer: Color(0xFF202A52),
   onPrimaryContainer: Color(0xFFB0BDFF),
+  secondary: Color(0xFF91A7FF),
+  onSecondary: Color(0xFF0F1319),
+  secondaryContainer: Color(0xFF26315E),
+  onSecondaryContainer: Color(0xFFC7D1FF),
+  tertiary: Color(0xFF3CCBB8),
   surface: Color(0xFF171C24),
   onSurface: Color(0xFFE8ECF2),
   surfaceContainerHighest: Color(0xFF212936),
@@ -94,6 +105,16 @@ ThemeData _build(ColorScheme scheme, Color background) => ThemeData(
         selectedColor: scheme.onPrimaryContainer,
       ),
       dividerTheme: DividerThemeData(color: scheme.outlineVariant, space: 1, thickness: 1),
+      // Unread counts are information, not errors: brand colour instead of Material's red.
+      badgeTheme: BadgeThemeData(backgroundColor: scheme.primary, textColor: scheme.onPrimary),
+      chipTheme: ChipThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        side: BorderSide(color: scheme.outlineVariant),
+        backgroundColor: scheme.surface,
+        selectedColor: scheme.primaryContainer,
+        labelStyle: TextStyle(fontSize: 13, color: scheme.onSurface),
+      ),
+      snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
     );
 
 final ThemeData lightTheme = _build(_lightScheme, const Color(0xFFF4F6FB));

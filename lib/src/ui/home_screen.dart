@@ -8,6 +8,7 @@ import 'new_message_dialog.dart';
 import 'recycle_bin_screen.dart';
 import 'settings_screen.dart';
 import 'thread_view.dart';
+import 'widgets.dart';
 
 /// The connected app: conversations on the left and the open one on the right on a wide window (Windows), one at a
 /// time on a phone.
@@ -40,7 +41,8 @@ class HomeScreen extends StatelessWidget {
                       onPressed: () => controller.openConversation(null),
                     )
                   : null,
-              title: Text(showThreadOnly ? selected.peer : 'NyaSmsForward'),
+              // In a conversation the header below names the correspondent; repeating it here only took room.
+              title: showThreadOnly ? null : const Text('短信'),
               actions: [
                 Center(child: LinkIndicator(link: controller.link)),
                 if (controller.unread > 0)
@@ -357,7 +359,7 @@ class _ConversationListState extends State<ConversationList> {
               : ListView.separated(
                   key: const Key('conversations'),
                   itemCount: items.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1, indent: 68),
                   itemBuilder: (context, i) => ConversationTile(
                     conversation: items[i],
                     phoneName: controller.phoneFor(items[i].deviceId)?.name,
@@ -413,61 +415,96 @@ class ConversationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final c = conversation;
     final last = c.last;
-    return ListTile(
-      selected: selected || (selecting && deleteSelected),
-      onTap: onTap,
-      leading: selecting
-          ? SizedBox(
-              width: 40,
-              child: Center(
-                child: Checkbox(
-                  value: deleteSelected,
-                  onChanged: (_) => onToggle(),
+    final brand = senderBrand(last.body);
+    final unread = c.unread > 0;
+    final highlighted = selected || (selecting && deleteSelected);
+    final code = last.code;
+    return Material(
+      color: highlighted ? scheme.primaryContainer : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
+          child: Row(
+            children: [
+              if (selecting)
+                Checkbox(value: deleteSelected, onChanged: (_) => onToggle())
+              else
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: PeerAvatar(peer: c.peer, brand: brand),
+                ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              text: brand ?? c.peer,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
+                                color: scheme.onSurface,
+                              ),
+                              children: [
+                                if (brand != null)
+                                  TextSpan(
+                                    text: '  ${c.peer}',
+                                    style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+                                  ),
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          clock(last.deviceTime),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: unread ? scheme.primary : scheme.onSurfaceVariant,
+                            fontWeight: unread ? FontWeight.w700 : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        if (code != null && code.isNotEmpty) ...[CodePill(code), const SizedBox(width: 6)],
+                        Expanded(
+                          child: Text(
+                            (last.isIncoming ? '' : '我：') + last.body,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: unread ? scheme.onSurface : scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        if (unread) ...[
+                          const SizedBox(width: 8),
+                          Badge.count(count: c.unread),
+                        ] else if (phoneName != null) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            phoneName!.split(' · ').first,
+                            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            )
-          : null,
-      title: Row(
-        children: [
-          if (!last.isIncoming) Text('发出 ', style: theme.textTheme.labelSmall),
-          Flexible(
-            child: Text(
-              c.peer,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: c.unread > 0 ? FontWeight.bold : FontWeight.w500,
-              ),
-            ),
+            ],
           ),
-          if (last.code != null && last.code!.isNotEmpty) ...[
-            const SizedBox(width: 6),
-            Text(
-              last.code!,
-              style: theme.textTheme.labelMedium?.copyWith(
-                fontFamily: 'monospace',
-                color: theme.colorScheme.primary,
-              ),
-            ),
-          ],
-        ],
-      ),
-      subtitle: Text(last.body, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(clock(last.deviceTime), style: theme.textTheme.labelSmall),
-          const SizedBox(height: 2),
-          if (c.unread > 0)
-            Badge.count(count: c.unread)
-          else
-            Text(
-              phoneName?.split(' · ').first ?? '',
-              style: theme.textTheme.labelSmall,
-            ),
-        ],
+        ),
       ),
     );
   }
