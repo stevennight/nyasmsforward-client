@@ -141,8 +141,8 @@ Future<void> _confirmThreadDelete(
   final count = controller.selectedMessageIds.length;
   final deletePhone = await confirmDeleteWithPhoneOption(
     context,
-    title: '移到回收站？',
-    message: '选中的 $count 条短信将保留在回收站 30 天，之后永久删除。',
+    title: '删除选中的 $count 条短信？',
+    message: '短信会移入回收站，30 天内可以恢复。',
   );
   if (deletePhone == null || !context.mounted) return;
   final error = await controller.deleteSelectedMessages(

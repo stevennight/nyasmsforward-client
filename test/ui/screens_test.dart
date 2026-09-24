@@ -306,7 +306,7 @@ void main() {
       await tester.pump();
       await tester.tap(byKey('deleteSelectedConversations'));
       await tester.pumpAndSettle();
-      expect(find.text('移除完整会话？'), findsOneWidget);
+      expect(find.text('删除选中的 2 个会话？'), findsOneWidget);
       await tester.tap(find.widgetWithText(FilledButton, '删除'));
       await tester.pumpAndSettle();
 

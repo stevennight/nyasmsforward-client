@@ -134,8 +134,8 @@ Future<void> _confirmConversationDelete(
   final count = controller.selectedConversations.length;
   final deletePhone = await confirmDeleteWithPhoneOption(
     context,
-    title: '移除完整会话？',
-    message: '选中的 $count 个号码会话及其全部短信将保留在回收站 30 天，之后永久删除。',
+    title: '删除选中的 $count 个会话？',
+    message: '会话里的全部短信会移入回收站，30 天内可以恢复。',
   );
   if (deletePhone == null || !context.mounted) {
     return;

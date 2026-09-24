@@ -21,9 +21,9 @@ Future<bool?> confirmDeleteWithPhoneOption(
             SwitchListTile(
               value: deletePhone,
               onChanged: (value) => setState(() => deletePhone = value),
-              title: const Text('同步删除手机原短信'),
+              title: const Text('同时删除手机上的原短信'),
               subtitle: const Text(
-                '关闭时只移入回收站，手机原短信保留不变；开启后手机在线时立即处理，离线后上线再处理。',
+                '接收端需要设为手机的默认短信应用才能删掉；手机离线时会在重新连上后处理。手机上删掉后无法恢复。',
               ),
               contentPadding: EdgeInsets.zero,
             ),
